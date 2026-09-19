@@ -224,6 +224,8 @@ Application Default Credentials を使う。モデル ID は接頭辞なしの `
 
 MIT License（`LICENSE`）。商用利用・改変・再配布ができる。
 
+`web/public/brand/` のロゴ（HerzLeben のロゴマーク・ロゴタイプ）は株式会社ヘルツレーベンの商標であり、MIT の対象外。フォークや派生物では差し替えること。
+
 ### データ
 
 **このリポジトリにデータは含まれない。** `data/download.sh` が実行時に data.cms.gov の

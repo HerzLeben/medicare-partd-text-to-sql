@@ -1,0 +1,51 @@
+# GitHub の main に push したら自動でビルド・デプロイする場合に使う。
+# 手元から1回だけ出すなら ./deploy.sh --run のほうが簡単。
+#
+# トリガー作成時に必要な権限（Cloud Build のサービスアカウントに付ける）:
+#   roles/run.admin, roles/iam.serviceAccountUser, roles/artifactregistry.writer
+substitutions:
+  _REGION: us-central1
+  _REPO: partd
+  _SERVICE: medicare-partd-text-to-sql
+  _RUNTIME_SA: partd-app@${PROJECT_ID}.iam.gserviceaccount.com
+
+steps:
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:${SHORT_SHA}
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:latest
+      - .
+
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args: [push, --all-tags, "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}"]
+
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:${SHORT_SHA}
+      - --region=${_REGION}
+      - --service-account=${_RUNTIME_SA}
+      # 公開しない。招待した Google アカウントだけがアクセスできる
+      - --no-allow-unauthenticated
+      - --min-instances=0
+      - --max-instances=2
+      - --concurrency=10
+      - --memory=1Gi
+      - --cpu=1
+      - --timeout=300
+      - --set-env-vars=GCP_PROJECT=${PROJECT_ID},BQ_DATASET=partd,BQ_LOCATION=US,MAX_BYTES_BILLED=2147483648,MAX_QUESTIONS_PER_SESSION=20,ANTHROPIC_MODEL=claude-sonnet-5
+      - --set-secrets=ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+timeout: 1800s

@@ -1,0 +1,152 @@
+[
+  {
+    "name": "year",
+    "type": "INT64",
+    "mode": "REQUIRED",
+    "description": "対象暦年（CY）。CSV には無いので前処理で付与"
+  },
+  {
+    "name": "prscrbr_npi",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "CMS 原列名 Prscrbr_NPI"
+  },
+  {
+    "name": "prscrbr_last_org_name",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "CMS 原列名 Prscrbr_Last_Org_Name"
+  },
+  {
+    "name": "prscrbr_first_name",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "CMS 原列名 Prscrbr_First_Name"
+  },
+  {
+    "name": "prscrbr_city",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "CMS 原列名 Prscrbr_City"
+  },
+  {
+    "name": "prscrbr_state_abrvtn",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "CMS 原列名 Prscrbr_State_Abrvtn"
+  },
+  {
+    "name": "prscrbr_state_fips",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "CMS 原列名 Prscrbr_State_FIPS"
+  },
+  {
+    "name": "prscrbr_type",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "CMS 原列名 Prscrbr_Type"
+  },
+  {
+    "name": "prscrbr_type_src",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "CMS 原列名 Prscrbr_Type_Src"
+  },
+  {
+    "name": "brnd_name",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "CMS 原列名 Brnd_Name"
+  },
+  {
+    "name": "brnd_name_norm",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "UPPER(brnd_name)。照合・CLUSTER BY 用の正規化列"
+  },
+  {
+    "name": "gnrc_name",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "CMS 原列名 Gnrc_Name"
+  },
+  {
+    "name": "gnrc_name_norm",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "UPPER(gnrc_name)。照合・CLUSTER BY 用の正規化列"
+  },
+  {
+    "name": "tot_clms",
+    "type": "INT64",
+    "mode": "NULLABLE",
+    "description": "CMS 原列名 Tot_Clms"
+  },
+  {
+    "name": "tot_30day_fills",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "CMS 原列名 Tot_30day_Fills"
+  },
+  {
+    "name": "tot_day_suply",
+    "type": "INT64",
+    "mode": "NULLABLE",
+    "description": "CMS 原列名 Tot_Day_Suply"
+  },
+  {
+    "name": "tot_drug_cst",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "CMS 原列名 Tot_Drug_Cst"
+  },
+  {
+    "name": "tot_benes",
+    "type": "INT64",
+    "mode": "NULLABLE",
+    "description": "CMS 原列名 Tot_Benes"
+  },
+  {
+    "name": "ge65_sprsn_flag",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "CMS 原列名 GE65_Sprsn_Flag"
+  },
+  {
+    "name": "ge65_tot_clms",
+    "type": "INT64",
+    "mode": "NULLABLE",
+    "description": "CMS 原列名 GE65_Tot_Clms"
+  },
+  {
+    "name": "ge65_tot_30day_fills",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "CMS 原列名 GE65_Tot_30day_Fills"
+  },
+  {
+    "name": "ge65_tot_drug_cst",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "CMS 原列名 GE65_Tot_Drug_Cst"
+  },
+  {
+    "name": "ge65_tot_day_suply",
+    "type": "INT64",
+    "mode": "NULLABLE",
+    "description": "CMS 原列名 GE65_Tot_Day_Suply"
+  },
+  {
+    "name": "ge65_bene_sprsn_flag",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "CMS 原列名 GE65_Bene_Sprsn_Flag"
+  },
+  {
+    "name": "ge65_tot_benes",
+    "type": "INT64",
+    "mode": "NULLABLE",
+    "description": "CMS 原列名 GE65_Tot_Benes"
+  }
+]

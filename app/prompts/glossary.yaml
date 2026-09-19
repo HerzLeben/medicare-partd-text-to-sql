@@ -1,0 +1,165 @@
+# 用語辞書。system.md に埋め込んで Prompt caching する。
+# すべて BigQuery の実データ（CY2022-2024）で確認済み。推測で書かないこと。
+
+# ---------------------------------------------------------------------------
+# 1. ユーザーの言い方 -> 列 / 計算
+# ---------------------------------------------------------------------------
+terms:
+  処方数|処方回数|請求数|claims: "tot_clms（回数）。処方「量」の比較なら tot_30day_fills（30日換算）"
+  処方量|30日換算|fills: tot_30day_fills
+  薬剤費|費用|コスト|支出|cost|spend: tot_drug_cst（USD、リベート控除前）
+  患者数|受給者数|beneficiaries: tot_benes（NULL は抑制＝1〜10人。0 ではない）
+  処方医数|医師数|prescribers: |
+    行が1つに定まるとき（ブランド1つ・州1つ）だけ geo_drug.tot_prscrbrs をそのまま使う。
+    複数行を SUM してはいけない。同じ医師が複数ブランドを処方していると重複して数えられる。
+    例：セマグルチドは Ozempic / Rybelsus / Wegovy の3行があり、
+    SUM(tot_prscrbrs) = 453,256 に対し実数は COUNT(DISTINCT prscrbr_npi) = 174,885（2.6倍の過大）。
+    一般名・薬効クラス・複数州でまとめるときは provider_drug の COUNT(DISTINCT prscrbr_npi) を使う。
+  専門科|診療科|specialty: prscrbr_type
+  ジェネリック率: "SAFE_DIVIDE(gnrc_tot_clms, tot_clms)（provider 表）"
+  ブランド率: "SAFE_DIVIDE(brnd_tot_clms, tot_clms)（provider 表）"
+  オピオイド処方率: "opioid_prscrbr_rate（%。すでに計算済み。再計算しない）"
+  自己負担|患者負担: "lis_bene_cst_shr + nonlis_bene_cst_shr（geo_drug 表にしか無い）"
+  高齢者|65歳以上: ge65_* 列
+  低所得|LIS: "lis_tot_clms / lis_drug_cst（provider 表）。列名は lis_drug_cst であって lis_tot_drug_cst ではない"
+  一人当たり費用|費用/患者: "SAFE_DIVIDE(SUM(tot_drug_cst), SUM(tot_benes))。tot_benes が NULL の行は分母に入らない"
+  州: "provider/provider_drug は prscrbr_state_abrvtn（略号 FL）、geo_drug は prscrbr_geo_desc（州名フル Florida）"
+  リスクスコア: "bene_avg_risk_scre（HCC。1.0 が平均）"
+  二重加入|Dual: bene_dual_cnt（Medicare と Medicaid の両方）
+
+# ---------------------------------------------------------------------------
+# 2. どのテーブルを使うか
+# ---------------------------------------------------------------------------
+table_hints:
+  州別・全国の薬剤集計: "geo_drug（117,661行/年と軽い。抑制前の全数集計なので州合計が正確）"
+  医師別・専門科別の集計: "provider（1,416,883行/年。1医師1行のサマリ）"
+  医師 × 薬剤の明細: "provider_drug（25,869,521行/年。重い。year と州か薬剤で必ず絞る）"
+  薬効クラスで絞る: "drug_class を gnrc_name_norm で結合する"
+  州略号と州名の変換: "state を挟む（geo_drug.prscrbr_geo_desc = state.state_name）"
+
+# ---------------------------------------------------------------------------
+# 3. 薬剤名（最重要）
+# ---------------------------------------------------------------------------
+drug_names:
+  表記: "CMS 原文は Title Case（Ozempic / Semaglutide）。SEMAGLUTIDE ではない"
+  照合に使う列: "gnrc_name_norm / brnd_name_norm（UPPER 正規化済み）。UPPER(gnrc_name) は書かない（クラスタ枝刈りが効かなくなる）"
+  表示に使う列: "gnrc_name / brnd_name（原文のまま見せる）"
+  落とし穴: |
+    一般名は列幅の都合で切り詰められている。教科書どおりの名前を IN で並べると 0 行になる。
+      EDOXABAN            -> 実データは EDOXABAN TOSYLATE
+      DABIGATRAN ETEXILATE-> 実データは DABIGATRAN ETEXILATE MESYLATE
+      DAPAGLIFLOZIN       -> 実データは DAPAGLIFLOZIN PROPANEDIOL
+      配合剤              -> EMPAGLIFLOZ/LINAGLIP/METFORMIN のように成分名まで省略される
+    薬効クラスで絞るときは必ず partd.drug_class を結合する。薬剤名を自分で並べない。
+  単剤だけに絞りたいとき: "gnrc_name_norm NOT LIKE '%/%'（配合剤はスラッシュ区切り）"
+
+# partd.drug_class の drug_class 値（17クラス・204行）。これ以外の値は存在しない。
+drug_classes:
+  GLP1: GLP-1受容体作動薬
+  SGLT2: SGLT2阻害薬
+  DPP4: DPP-4阻害薬
+  BIGUANIDE: ビグアナイド（メトホルミン）
+  SULFONYLUREA: スルホニル尿素
+  INSULIN: インスリン
+  DOAC: DOAC（直接経口抗凝固薬）
+  WARFARIN: ワルファリン
+  STATIN: スタチン
+  PPI: PPI（プロトンポンプ阻害薬）
+  ARB: ARB（アンジオテンシン受容体拮抗薬）
+  ACEI: ACE阻害薬
+  BETA_BLOCKER: β遮断薬
+  SSRI: SSRI
+  SNRI: SNRI
+  ATYPICAL_ANTIPSYCHOTIC: 非定型抗精神病薬
+  ANTIDEMENTIA: 抗認知症薬
+
+drug_class_caveat: |
+  配合剤は複数クラスに属する（EMPAGLIFLOZIN/METFORMIN HCL は SGLT2 かつ BIGUANIDE）。
+  複数クラスを一度に集計すると二重計上になるので、集計は 1 クラスずつ行う。
+
+# drug_class に無いカテゴリは CMS 側のフラグ/集計列を使う（自前で薬剤名を並べない）
+cms_categories:
+  オピオイド|opioid: "geo_drug.opioid_drug_flag = 'Y'、または provider.opioid_tot_clms（CMS の OMS 定義）"
+  長時間作用型オピオイド: "geo_drug.opioid_la_drug_flag = 'Y'、または provider.opioid_la_tot_clms"
+  抗生物質|antibiotic: "geo_drug.antbtc_drug_flag = 'Y'、または provider.antbtc_tot_clms（経口全身薬のみ）"
+  抗精神病薬|antipsychotic: "geo_drug.antpsyct_drug_flag = 'Y'、または provider.antpsyct_ge65_tot_clms（65歳以上のみ）"
+
+# ブランド名（質問がブランド名でも brnd_name_norm でそのまま引ける。一般名に読み替えなくてよい）
+brand_to_generic:
+  OZEMPIC: SEMAGLUTIDE
+  WEGOVY: SEMAGLUTIDE
+  RYBELSUS: SEMAGLUTIDE
+  MOUNJARO: TIRZEPATIDE
+  ZEPBOUND: TIRZEPATIDE
+  TRULICITY: DULAGLUTIDE
+  ELIQUIS: APIXABAN
+  XARELTO: RIVAROXABAN
+  JARDIANCE: EMPAGLIFLOZIN
+  FARXIGA: DAPAGLIFLOZIN PROPANEDIOL
+  ENTRESTO: SACUBITRIL/VALSARTAN
+
+# ---------------------------------------------------------------------------
+# 4. 専門科（prscrbr_type。実データ 214 種の完全一致文字列）
+# ---------------------------------------------------------------------------
+specialty_aliases:
+  内科|内科医: Internal Medicine
+  家庭医|プライマリケア|かかりつけ: Family Practice
+  一般医: General Practice
+  精神科|精神科医: "Psychiatry（別に Psychiatry & Neurology、Geriatric Psychiatry もある）"
+  循環器|心臓|循環器内科: Cardiology
+  内分泌|糖尿病: Endocrinology
+  腎臓|腎臓内科: Nephrology
+  神経内科|脳神経内科: Neurology
+  呼吸器: Pulmonary Disease
+  消化器: Gastroenterology
+  リウマチ: Rheumatology
+  感染症: Infectious Disease
+  老年科|高齢者医療: Geriatric Medicine
+  腫瘍内科|がん|血液腫瘍: "Hematology-Oncology（別に Medical Oncology、Radiation Oncology、Surgical Oncology、Gynecological Oncology）"
+  皮膚科: Dermatology
+  眼科: "Ophthalmology（検眼は Optometry で別）"
+  泌尿器科: Urology
+  整形外科: Orthopedic Surgery
+  麻酔科: Anesthesiology
+  ペインクリニック|疼痛: "Pain Management / Interventional Pain Management"
+  救急: Emergency Medicine
+  産婦人科: Obstetrics & Gynecology
+  ナースプラクティショナー|NP: Nurse Practitioner
+  PA|フィジシャンアシスタント: Physician Assistant
+  薬剤師: Pharmacist
+  歯科: Dentist
+
+specialty_caveat: |
+  処方者数が最も多いのは Nurse Practitioner（278,577人）と Physician Assistant（137,246人）で、
+  「医師」の集計にこれらを含めるかは質問の意図次第。曖昧なら含めたうえで注記する。
+  Student in an Organized Health Care Education/Training Program（67,996人）も混ざっている。
+
+# ---------------------------------------------------------------------------
+# 5. 州・地域
+# ---------------------------------------------------------------------------
+states: |
+  partd.state（62行）を使う。state_abrvtn（FL）/ state_name（Florida）/ state_fips / region / is_state。
+  「州別ランキング」では is_state = TRUE（50州+DC）だけに絞る。
+  除外される値：Puerto Rico, Guam, Virgin Islands, American Samoa, Northern Mariana Islands,
+  Federated States of Micronesia, Armed Forces Europe/Pacific/Central-South America,
+  Unknown（略号 XX）, Foreign Country（略号 ZZ）。
+  geo_drug には prscrbr_geo_lvl = 'National' の行も入っている。州別集計では必ず 'State' に絞る。
+
+# 都市-地方区分（prscrbr_ruca は STRING。数値ではない）
+ruca: |
+  値は '1' '1.1' '2' ... '10.3' の小数サブコードを含む文字列と、'99' = Unknown、NULL。
+  99 と NULL を必ず除外すること。CAST して >= 7 で地方判定すると Unknown(99) が地方に混ざる。
+  都市: CAST(prscrbr_ruca AS FLOAT64) < 4
+  小都市: 4 以上 7 未満
+  地方: 7 以上 11 未満   ← 上限を付けて 99 を落とす
+
+# ---------------------------------------------------------------------------
+# 6. 抑制値（11件未満）
+# ---------------------------------------------------------------------------
+suppression: |
+  件数 1〜10 は blank（BigQuery では NULL）。0 ではない。0 に読み替えない。
+  geo_drug CY2024 では tot_benes の 18.7% が NULL。
+  受給者数を分母にする指標（一人当たり費用など）は分母が欠けるので、
+  COUNTIF(tot_benes IS NULL) AS suppressed_rows を必ず併記して注記する。
+  *_sprsn_flag: '*' は一次抑制（値が1〜10）、'#' は従属抑制（他から逆算できるため隠した）。
+  geo_drug は抑制前の全数集計なので、provider_drug を州で足し上げた値とは一致しない。

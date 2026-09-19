@@ -1,0 +1,26 @@
+# gcloud builds submit がソースをアップロードするときに除外するもの。
+# gcloud は .dockerignore ではなくこのファイルを見る（無いと .gitignore から
+# 自動生成するが、web/ 配下の node_modules は拾えず 600MB 超を送ってしまう）。
+#
+# 注意：`*.md` のような広いパターンを書かないこと。
+# app/prompts/system.md はアプリの実行に必要で、除外すると起動後に
+# FileNotFoundError で全リクエストが落ちる（実際に踏んだ）。
+.git/
+.gitignore
+.env
+.venv/
+__pycache__/
+**/__pycache__/
+data/raw/
+data/parquet/
+web/node_modules/
+web/.next/
+*.zip
+.DS_Store
+
+# 実行に不要なドキュメント類（app/prompts/*.md は除外しない）
+docs/
+eval/
+README.md
+CLAUDE.md
+README_HANDOFF.md

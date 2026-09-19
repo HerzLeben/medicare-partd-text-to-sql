@@ -1,0 +1,13 @@
+# Medicare Part D × Text-to-SQL — 固定スタック（CLAUDE.md「技術スタック」）
+fastapi>=0.115
+uvicorn[standard]>=0.32
+anthropic>=1.4
+google-cloud-bigquery>=3.27
+db-dtypes>=1.3            # BigQuery -> pandas の DATE/TIME 変換
+pandas>=2.2
+pyarrow>=18.0
+PyYAML>=6.0
+python-dotenv>=1.0
+
+# 前処理（ローカルのみ。Cloud Run では未使用）
+duckdb>=1.1

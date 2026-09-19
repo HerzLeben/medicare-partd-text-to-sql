@@ -1,0 +1,305 @@
+# 精度評価セット 30問。
+# level: 1=単純集計 2=結合・条件複数 3=用語辞書がないと解けない
+# expected_sql は BigQuery で実行して結果を確認済み（run_eval.py --validate で再確認できる）。
+# 判定は結果集合の一致（列名は無視、行の順序は無視、数値は相対誤差 1%）。
+#
+# 注意: 薬剤名は Title Case（Ozempic / Semaglutide）で、列幅の都合で切り詰められている。
+# 照合は gnrc_name_norm / brnd_name_norm（UPPER）を使い、薬効クラスは drug_class を結合する。
+
+# --- レベル1：単純集計 ------------------------------------------------------
+
+- id: q01
+  level: 1
+  question: 2024年に最も処方回数が多かった薬剤トップ5（一般名で集計）
+  expected_sql: |
+    SELECT gnrc_name, SUM(tot_clms) AS clms
+    FROM partd.geo_drug
+    WHERE year = 2024 AND prscrbr_geo_lvl = 'National'
+    GROUP BY gnrc_name ORDER BY clms DESC LIMIT 5
+
+- id: q02
+  level: 1
+  question: 2023年のテキサス州の総薬剤費はいくら？
+  expected_sql: |
+    SELECT SUM(tot_drug_cst) AS cost
+    FROM partd.geo_drug
+    WHERE year = 2023 AND prscrbr_geo_lvl = 'State' AND prscrbr_geo_desc = 'Texas'
+
+- id: q03
+  level: 1
+  question: 2024年の総薬剤費が高い薬剤トップ10（ブランド名ごとに）
+  expected_sql: |
+    SELECT brnd_name, gnrc_name, SUM(tot_drug_cst) AS cost
+    FROM partd.geo_drug
+    WHERE year = 2024 AND prscrbr_geo_lvl = 'National'
+    GROUP BY brnd_name, gnrc_name ORDER BY cost DESC LIMIT 10
+
+- id: q04
+  level: 1
+  question: 2024年にセマグルチドを処方した医師は何人？
+  expected_sql: |
+    SELECT COUNT(DISTINCT prscrbr_npi) AS n
+    FROM partd.provider_drug
+    WHERE year = 2024 AND gnrc_name_norm = 'SEMAGLUTIDE'
+
+- id: q05
+  level: 1
+  question: 2024年の専門科別の医師数トップ10
+  expected_sql: |
+    SELECT prscrbr_type, COUNT(*) AS n
+    FROM partd.provider
+    WHERE year = 2024
+    GROUP BY prscrbr_type ORDER BY n DESC LIMIT 10
+
+- id: q06
+  level: 1
+  question: 全国の総処方回数を年ごとに
+  expected_sql: |
+    SELECT year, SUM(tot_clms) AS clms
+    FROM partd.geo_drug
+    WHERE prscrbr_geo_lvl = 'National'
+    GROUP BY year ORDER BY year
+
+- id: q07
+  level: 1
+  question: 2024年に受給者数が最も多かった薬剤トップ5（一般名で集計）
+  expected_sql: |
+    SELECT gnrc_name, SUM(tot_benes) AS benes
+    FROM partd.geo_drug
+    WHERE year = 2024 AND prscrbr_geo_lvl = 'National'
+    GROUP BY gnrc_name ORDER BY benes DESC LIMIT 5
+
+- id: q08
+  level: 1
+  question: 2024年のフロリダ州の処方医は何人？
+  expected_sql: |
+    SELECT COUNT(*) AS n
+    FROM partd.provider
+    WHERE year = 2024 AND prscrbr_state_abrvtn = 'FL'
+
+# --- レベル2：結合・条件複数 ------------------------------------------------
+
+- id: q09
+  level: 2
+  question: 2024年、専門科別の平均オピオイド処方率が高い上位10専門科（医師100人以上に限る）
+  expected_sql: |
+    SELECT prscrbr_type, AVG(opioid_prscrbr_rate) AS avg_rate, COUNT(*) AS n
+    FROM partd.provider
+    WHERE year = 2024 AND opioid_prscrbr_rate IS NOT NULL
+    GROUP BY prscrbr_type HAVING COUNT(*) >= 100
+    ORDER BY avg_rate DESC LIMIT 10
+
+- id: q10
+  level: 2
+  question: 2024年、カリフォルニア州で精神科医が最も多く処方した薬剤トップ10（一般名で集計）
+  expected_sql: |
+    SELECT gnrc_name, SUM(tot_clms) AS clms
+    FROM partd.provider_drug
+    WHERE year = 2024 AND prscrbr_state_abrvtn = 'CA' AND prscrbr_type = 'Psychiatry'
+    GROUP BY gnrc_name ORDER BY clms DESC LIMIT 10
+
+- id: q11
+  level: 2
+  question: 2024年、65歳以上の抗精神病薬請求数が多い医師上位10（NPI と専門科）
+  expected_sql: |
+    SELECT prscrbr_npi, prscrbr_type, prscrbr_state_abrvtn, antpsyct_ge65_tot_clms
+    FROM partd.provider
+    WHERE year = 2024 AND antpsyct_ge65_tot_clms IS NOT NULL
+    ORDER BY antpsyct_ge65_tot_clms DESC LIMIT 10
+
+- id: q12
+  level: 2
+  question: 2024年の州別の一人当たり薬剤費ランキング上位10（50州とDCのみ）
+  expected_sql: |
+    SELECT s.state_abrvtn, SAFE_DIVIDE(SUM(p.tot_drug_cst), SUM(p.tot_benes)) AS cost_per_bene
+    FROM partd.provider AS p
+    JOIN partd.state AS s ON s.state_abrvtn = p.prscrbr_state_abrvtn AND s.is_state
+    WHERE p.year = 2024
+    GROUP BY s.state_abrvtn ORDER BY cost_per_bene DESC LIMIT 10
+
+- id: q13
+  level: 2
+  question: 2024年、ナースプラクティショナーの総処方回数は内科医の何倍？
+  expected_sql: |
+    SELECT prscrbr_type, SUM(tot_clms) AS clms
+    FROM partd.provider
+    WHERE year = 2024 AND prscrbr_type IN ('Nurse Practitioner', 'Internal Medicine')
+    GROUP BY prscrbr_type
+
+- id: q14
+  level: 2
+  question: 2024年、オピオイド処方の請求数が多い州トップ10（50州とDCのみ）
+  expected_sql: |
+    SELECT s.state_abrvtn, SUM(p.opioid_tot_clms) AS opioid_clms
+    FROM partd.provider AS p
+    JOIN partd.state AS s ON s.state_abrvtn = p.prscrbr_state_abrvtn AND s.is_state
+    WHERE p.year = 2024
+    GROUP BY s.state_abrvtn ORDER BY opioid_clms DESC LIMIT 10
+
+- id: q15
+  level: 2
+  question: 2024年、患者の平均リスクスコアが高い専門科トップ10（医師100人以上。医師ごとのリスクスコアの単純平均で）
+  expected_sql: |
+    SELECT prscrbr_type, AVG(bene_avg_risk_scre) AS avg_risk, COUNT(*) AS n
+    FROM partd.provider
+    WHERE year = 2024 AND bene_avg_risk_scre IS NOT NULL
+    GROUP BY prscrbr_type HAVING COUNT(*) >= 100
+    ORDER BY avg_risk DESC LIMIT 10
+
+- id: q16
+  level: 2
+  question: 2024年、フロリダ州の内科医でオピオイド処方回数が多い上位20（NPI）
+  expected_sql: |
+    SELECT prscrbr_npi, prscrbr_city, opioid_tot_clms, opioid_prscrbr_rate
+    FROM partd.provider
+    WHERE year = 2024 AND prscrbr_state_abrvtn = 'FL'
+      AND prscrbr_type = 'Internal Medicine' AND opioid_tot_clms IS NOT NULL
+    ORDER BY opioid_tot_clms DESC LIMIT 20
+
+- id: q17
+  level: 2
+  question: 2022年から2024年で全国の総薬剤費はどれだけ増えた？
+  expected_sql: |
+    SELECT year, SUM(tot_drug_cst) AS cost
+    FROM partd.geo_drug
+    WHERE prscrbr_geo_lvl = 'National' AND year IN (2022, 2024)
+    GROUP BY year ORDER BY year
+
+- id: q18
+  level: 2
+  question: 2024年、受給者の平均年齢が最も高い専門科トップ10（医師100人以上。医師ごとの平均年齢の単純平均で）
+  expected_sql: |
+    SELECT prscrbr_type, AVG(bene_avg_age) AS avg_age, COUNT(*) AS n
+    FROM partd.provider
+    WHERE year = 2024 AND bene_avg_age IS NOT NULL
+    GROUP BY prscrbr_type HAVING COUNT(*) >= 100
+    ORDER BY avg_age DESC LIMIT 10
+
+- id: q19
+  level: 2
+  question: 2024年、都市部（RUCA 1〜3）と地方（RUCA 7〜10）でジェネリック率を比較。区分名は urban / rural とすること
+  expected_sql: |
+    SELECT
+      CASE WHEN CAST(prscrbr_ruca AS FLOAT64) < 4 THEN 'urban'
+           WHEN CAST(prscrbr_ruca AS FLOAT64) >= 7
+            AND CAST(prscrbr_ruca AS FLOAT64) < 11 THEN 'rural' END AS area,
+      SAFE_DIVIDE(SUM(gnrc_tot_clms), SUM(tot_clms)) AS generic_rate
+    FROM partd.provider
+    WHERE year = 2024 AND prscrbr_ruca IS NOT NULL AND prscrbr_ruca != '99'
+    GROUP BY area HAVING area IS NOT NULL
+
+- id: q20
+  level: 2
+  question: 2024年、患者の自己負担額が大きい薬剤トップ10（全国、ブランド名ごとに）
+  expected_sql: |
+    SELECT brnd_name, gnrc_name,
+           SUM(lis_bene_cst_shr + nonlis_bene_cst_shr) AS out_of_pocket
+    FROM partd.geo_drug
+    WHERE year = 2024 AND prscrbr_geo_lvl = 'National'
+    GROUP BY brnd_name, gnrc_name ORDER BY out_of_pocket DESC LIMIT 10
+
+# --- レベル3：用語辞書がないと解けない --------------------------------------
+
+- id: q21
+  level: 3
+  question: オゼンピックの処方医数は2022年から2024年でどれだけ増えた？
+  expected_sql: |
+    SELECT year, SUM(tot_prscrbrs) AS prescribers
+    FROM partd.geo_drug
+    WHERE prscrbr_geo_lvl = 'National' AND brnd_name_norm = 'OZEMPIC' AND year IN (2022, 2024)
+    GROUP BY year ORDER BY year
+
+- id: q22
+  level: 3
+  question: SGLT2阻害薬の全国処方量（30日換算）の年次推移
+  expected_sql: |
+    SELECT g.year, SUM(g.tot_30day_fills) AS fills
+    FROM partd.geo_drug AS g
+    JOIN partd.drug_class AS d ON d.gnrc_name_norm = g.gnrc_name_norm AND d.drug_class = 'SGLT2'
+    WHERE g.prscrbr_geo_lvl = 'National'
+    GROUP BY g.year ORDER BY g.year
+
+- id: q23
+  level: 3
+  question: 2024年の低所得補助（LIS）向け請求の割合が高い州トップ10
+  expected_sql: |
+    SELECT s.state_abrvtn, SAFE_DIVIDE(SUM(p.lis_tot_clms), SUM(p.tot_clms)) AS lis_share
+    FROM partd.provider AS p
+    JOIN partd.state AS s ON s.state_abrvtn = p.prscrbr_state_abrvtn AND s.is_state
+    WHERE p.year = 2024
+    GROUP BY s.state_abrvtn ORDER BY lis_share DESC LIMIT 10
+
+- id: q24
+  level: 3
+  question: GLP-1受容体作動薬の州別処方量（30日換算）を2022年と2024年で比較
+  expected_sql: |
+    SELECT s.state_abrvtn,
+           SUM(IF(g.year = 2022, g.tot_30day_fills, 0)) AS fills_2022,
+           SUM(IF(g.year = 2024, g.tot_30day_fills, 0)) AS fills_2024
+    FROM partd.geo_drug AS g
+    JOIN partd.drug_class AS d ON d.gnrc_name_norm = g.gnrc_name_norm AND d.drug_class = 'GLP1'
+    JOIN partd.state AS s ON s.state_name = g.prscrbr_geo_desc AND s.is_state
+    WHERE g.year IN (2022, 2024) AND g.prscrbr_geo_lvl = 'State'
+    GROUP BY s.state_abrvtn ORDER BY fills_2024 DESC
+
+- id: q25
+  level: 3
+  question: DOAC（直接経口抗凝固薬）の処方医数の年次推移を薬剤別に
+  expected_sql: |
+    SELECT g.year, g.gnrc_name, SUM(g.tot_prscrbrs) AS prescribers
+    FROM partd.geo_drug AS g
+    JOIN partd.drug_class AS d ON d.gnrc_name_norm = g.gnrc_name_norm AND d.drug_class = 'DOAC'
+    WHERE g.prscrbr_geo_lvl = 'National'
+    GROUP BY g.year, g.gnrc_name ORDER BY g.year, prescribers DESC
+
+- id: q26
+  level: 3
+  question: 2024年のスタチンの総薬剤費は全国でいくら？
+  expected_sql: |
+    SELECT SUM(g.tot_drug_cst) AS cost
+    FROM partd.geo_drug AS g
+    JOIN partd.drug_class AS d ON d.gnrc_name_norm = g.gnrc_name_norm AND d.drug_class = 'STATIN'
+    WHERE g.year = 2024 AND g.prscrbr_geo_lvl = 'National'
+
+- id: q27
+  level: 3
+  question: 2024年に抗認知症薬を最も多く処方した専門科トップ5
+  expected_sql: |
+    SELECT pd.prscrbr_type, SUM(pd.tot_clms) AS clms
+    FROM partd.provider_drug AS pd
+    JOIN partd.drug_class AS d
+      ON d.gnrc_name_norm = pd.gnrc_name_norm AND d.drug_class = 'ANTIDEMENTIA'
+    WHERE pd.year = 2024
+    GROUP BY pd.prscrbr_type ORDER BY clms DESC LIMIT 5
+
+- id: q28
+  level: 3
+  question: 2024年、非定型抗精神病薬の全国処方回数を薬剤別にトップ10
+  expected_sql: |
+    SELECT g.gnrc_name, SUM(g.tot_clms) AS clms
+    FROM partd.geo_drug AS g
+    JOIN partd.drug_class AS d
+      ON d.gnrc_name_norm = g.gnrc_name_norm AND d.drug_class = 'ATYPICAL_ANTIPSYCHOTIC'
+    WHERE g.year = 2024 AND g.prscrbr_geo_lvl = 'National'
+    GROUP BY g.gnrc_name ORDER BY clms DESC LIMIT 10
+
+- id: q29
+  level: 3
+  question: 2024年、PPIの処方量（30日換算）が多い州トップ10
+  expected_sql: |
+    SELECT s.state_abrvtn, SUM(g.tot_30day_fills) AS fills
+    FROM partd.geo_drug AS g
+    JOIN partd.drug_class AS d ON d.gnrc_name_norm = g.gnrc_name_norm AND d.drug_class = 'PPI'
+    JOIN partd.state AS s ON s.state_name = g.prscrbr_geo_desc AND s.is_state
+    WHERE g.year = 2024 AND g.prscrbr_geo_lvl = 'State'
+    GROUP BY s.state_abrvtn ORDER BY fills DESC LIMIT 10
+
+- id: q30
+  level: 3
+  question: 2024年、エリキュースとイグザレルトの全国処方回数を比較
+  expected_sql: |
+    SELECT brnd_name, SUM(tot_clms) AS clms
+    FROM partd.geo_drug
+    WHERE year = 2024 AND prscrbr_geo_lvl = 'National'
+      AND brnd_name_norm IN ('ELIQUIS', 'XARELTO')
+    GROUP BY brnd_name ORDER BY clms DESC

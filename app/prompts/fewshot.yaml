@@ -1,0 +1,151 @@
+# Few-shot 5問。SQL はすべて BigQuery（partd, CY2022-2024）で実行して結果を確認済み。
+# 型：州別推移 / トップN / 医師単位 / 年次推移 / 比率と抑制の扱い
+
+- question: GLP-1受容体作動薬の州別処方数を2022→2024で比較して
+  sql: |
+    SELECT
+      g.prscrbr_geo_desc AS state,
+      s.state_abrvtn,
+      SUM(IF(g.year = 2022, g.tot_30day_fills, 0)) AS fills_2022,
+      SUM(IF(g.year = 2024, g.tot_30day_fills, 0)) AS fills_2024,
+      SAFE_DIVIDE(
+        SUM(IF(g.year = 2024, g.tot_30day_fills, 0)),
+        SUM(IF(g.year = 2022, g.tot_30day_fills, 0))
+      ) - 1 AS growth
+    FROM partd.geo_drug AS g
+    JOIN partd.drug_class AS d
+      ON d.gnrc_name_norm = g.gnrc_name_norm AND d.drug_class = 'GLP1'
+    JOIN partd.state AS s
+      ON s.state_name = g.prscrbr_geo_desc AND s.is_state
+    WHERE g.year IN (2022, 2024)
+      AND g.prscrbr_geo_lvl = 'State'
+    GROUP BY state, s.state_abrvtn
+    ORDER BY growth DESC
+    LIMIT 60
+  plot: {kind: choropleth_state, x: state_abrvtn, y: growth, title: "GLP-1 30日換算処方数の増加率 2022→2024"}
+  note: |
+    州別は geo_drug（軽い・抑制前の全数）。処方「量」は tot_30day_fills。
+    薬効クラスは drug_class を結合する（薬剤名を IN で並べない）。
+    コロプレスには州略号が要るので state を結合して state_abrvtn を取る。
+    is_state で 50州+DC に絞る（準州・軍事郵便・Unknown を落とす）。
+
+- question: 2024年の総薬剤費トップ10の薬剤は？ブランド/ジェネリック別に
+  sql: |
+    SELECT
+      brnd_name,
+      gnrc_name,
+      IF(brnd_name_norm = gnrc_name_norm, 'generic', 'brand') AS kind,
+      SUM(tot_drug_cst) AS total_cost,
+      SUM(tot_clms) AS total_claims,
+      SAFE_DIVIDE(SUM(tot_drug_cst), SUM(tot_clms)) AS cost_per_claim
+    FROM partd.geo_drug
+    WHERE year = 2024
+      AND prscrbr_geo_lvl = 'National'
+    GROUP BY brnd_name, gnrc_name, kind
+    ORDER BY total_cost DESC
+    LIMIT 10
+  plot: {kind: bar, x: brnd_name, y: total_cost, color: kind, title: "2024年 総薬剤費トップ10", note: "費用はリベート控除前"}
+  note: |
+    全国集計は geo_drug の prscrbr_geo_lvl = 'National'（州を SUM しない）。
+    ブランド/ジェネリックの厳密な区分（FDA 承認区分）は provider 表の brnd_/gnrc_ 集計列にしか無く、
+    薬剤単位では判定できない。ブランド名と一般名が一致するかで近似し、その旨を注記する。
+
+- question: フロリダ州の内科医でオピオイド処方が多い上位20
+  sql: |
+    SELECT
+      prscrbr_npi,
+      prscrbr_last_org_name,
+      prscrbr_first_name,
+      prscrbr_city,
+      opioid_tot_clms,
+      opioid_prscrbr_rate,
+      tot_clms
+    FROM partd.provider
+    WHERE year = 2024
+      AND prscrbr_state_abrvtn = 'FL'
+      AND prscrbr_type = 'Internal Medicine'
+      AND opioid_tot_clms IS NOT NULL
+    ORDER BY opioid_tot_clms DESC
+    LIMIT 20
+  plot: {kind: table, title: "FL 内科医 オピオイド請求数 上位20（2024）", note: "処方数の多さは医療の質を示すものではありません"}
+  note: |
+    医師単位は provider 表（1医師1行）。NPI を必ず併記する。
+    opioid_prscrbr_rate は計算済みの % なので再計算しない。
+    opioid_tot_clms IS NULL は「0件」ではなく「1〜10件の抑制」なので除外する。
+
+- question: 抗凝固薬（DOAC）の処方医数の年次推移
+  sql: |
+    SELECT
+      g.year,
+      g.gnrc_name,
+      SUM(g.tot_prscrbrs) AS prescribers,
+      SUM(g.tot_clms) AS claims
+    FROM partd.geo_drug AS g
+    JOIN partd.drug_class AS d
+      ON d.gnrc_name_norm = g.gnrc_name_norm AND d.drug_class = 'DOAC'
+    WHERE g.prscrbr_geo_lvl = 'National'
+    GROUP BY g.year, g.gnrc_name
+    ORDER BY g.year, prescribers DESC
+  plot: {kind: line, x: year, y: prescribers, color: gnrc_name, title: "DOAC 処方医数の推移（全国）"}
+  note: |
+    「推移」で年の指定が無ければ全年（CY2022-2024）。
+    この質問は薬剤（gnrc_name）ごとに1行ずつ出すので tot_prscrbrs をそのまま使える。
+    複数行をまとめて SUM すると医師が重複して数えられるので、
+    一般名や薬効クラスで束ねるときは provider_drug の COUNT(DISTINCT prscrbr_npi) を使う。
+    DOAC の実データ名は APIXABAN / RIVAROXABAN / DABIGATRAN ETEXILATE MESYLATE /
+    EDOXABAN TOSYLATE。名前を書かず drug_class で引く。
+
+- question: 州別の一人当たり薬剤費ランキング（2024）
+  sql: |
+    SELECT
+      p.prscrbr_state_abrvtn AS state_abrvtn,
+      s.state_name,
+      SUM(p.tot_drug_cst) AS total_cost,
+      SUM(p.tot_benes) AS total_benes,
+      SAFE_DIVIDE(SUM(p.tot_drug_cst), SUM(p.tot_benes)) AS cost_per_bene,
+      COUNTIF(p.tot_benes IS NULL) AS suppressed_rows
+    FROM partd.provider AS p
+    JOIN partd.state AS s
+      ON s.state_abrvtn = p.prscrbr_state_abrvtn AND s.is_state
+    WHERE p.year = 2024
+    GROUP BY state_abrvtn, s.state_name
+    ORDER BY cost_per_bene DESC
+    LIMIT 60
+  plot:
+    kind: choropleth_state
+    x: state_abrvtn
+    y: cost_per_bene
+    title: "受給者一人当たり薬剤費（2024）"
+    note: "受給者数が抑制（1〜10人）された医師は分母から除外。同一患者が複数医師に数えられるため実際の一人当たり額より小さい"
+  note: |
+    分母に tot_benes を使うときは COUNTIF(tot_benes IS NULL) AS suppressed_rows を必ず併記する。
+    tot_benes は「その医師の受給者数」なので州で合計すると患者の重複計上になる。解釈でその旨を述べる。
+    州の絞り込みは state を結合して is_state で行う（NOT IN ('XX','ZZ',...) と書かない）。
+
+# --- 形式だけを変える指示（2026-09-19 追加）。出力の形は SQL とは独立に決まる ---
+
+- question: それを折れ線にして
+  context: 直前に「抗凝固薬（DOAC）の処方医数の年次推移を薬剤別に」を run_sql で集計し、year・gnrc_name・prescribers の表と棒グラフを返している
+  plot: {kind: line, x: year, y: prescribers, color: gnrc_name, title: "DOAC 処方医数の年次推移（薬剤別）"}
+  note: |
+    見せ方だけの指示。集計は変わらないので run_sql は呼ばず、直前の結果に対する plot_spec だけを返す。
+    解釈は「折れ線に変えました」程度の 1 文でよい。
+
+- question: それを州別に分けて
+  context: 直前に「2024年のスタチンの総薬剤費は全国でいくら？」を run_sql で集計し、全国 1 行の表を返している
+  sql: |
+    SELECT
+      s.state_abrvtn,
+      SUM(g.tot_drug_cst) AS total_cost
+    FROM partd.geo_drug AS g
+    JOIN partd.drug_class AS d
+      ON d.gnrc_name_norm = g.gnrc_name_norm AND d.drug_class = 'STATIN'
+    JOIN partd.state AS s
+      ON s.state_name = g.prscrbr_geo_desc AND s.is_state
+    WHERE g.year = 2024 AND g.prscrbr_geo_lvl = 'State'
+    GROUP BY s.state_abrvtn
+    ORDER BY total_cost DESC
+  plot: {kind: choropleth_state, x: state_abrvtn, y: total_cost, title: "スタチンの総薬剤費 2024（州別）"}
+  note: |
+    こちらは集計の粒度が変わる（全国 → 州別）ので run_sql からやり直す。
+    「形式だけ」と「集計が変わる」の見分けが、上の例との違い。

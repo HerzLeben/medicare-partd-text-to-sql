@@ -1,0 +1,174 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   デザイントークン
+   系列色はヘルツレーベンのティール（#01a09b）を先頭にした検証済みパレット（scripts/validate_palette.js で
+   CVD 分離・通常視分離・彩度・明度帯をすべて通したもの）。順序は固定で、
+   循環させない。9系列目は「その他」に畳む。
+   --------------------------------------------------------------------------- */
+:root {
+  color-scheme: light;
+
+  --surface:        #fcfcfb;   /* 地色。チャートの背景と一致させる */
+  --surface-raised: #ffffff;
+  --surface-sunken: #f2f1ee;
+  --border:         #e3e2dd;
+  --border-strong:  #cfcec8;
+
+  --ink:            #0b0b0b;
+  --ink-secondary:  #52514e;
+  --ink-muted:      #8a8983;
+
+  --accent:         #007a76;   /* ヘルツレーベンのティール #01a09b を文字用に暗くした（地色に 5.1:1） */
+  --accent-soft:    #eaf7f6;   /* コーポレートサイトの淡色 */
+  --brand:          #01a09b;   /* ロゴと同じ。太い面（ヘッダ右端の帯、カードの縁）にだけ使う */
+  --brand-hover:    #01908b;
+  --nav:            #011b4a;   /* コーポレートサイトのヘッダと同じ紺 */
+  --side:           #eef8f7;   /* サイドバー。ティールの薄い地 */
+  --side-line:      #cfe8e6;
+  --danger:         #c8332f;
+  --danger-soft:    #fdeceb;
+
+  --series-1: #008f8a; --series-2: #eb6834; --series-3: #4a3aa7; --series-4: #eda100;
+  --series-5: #e87ba4; --series-6: #008300; --series-7: #e34948; --series-8: #2a78d6;
+
+  --grid: #e8e7e3;
+
+  --radius: 10px;
+  --shadow-card: 0 1px 2px rgb(11 11 11 / 0.04), 0 1px 8px rgb(11 11 11 / 0.03);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface:        #1a1a19;
+    --surface-raised: #232322;
+    --surface-sunken: #131312;
+    --border:         #35352f;
+    --border-strong:  #4a4a43;
+
+    --ink:            #ffffff;
+    --ink-secondary:  #c3c2b7;
+    --ink-muted:      #8d8c83;
+
+    --accent:         #33bfba;
+    --accent-soft:    #12302f;
+    --brand:          #01a09b;
+    --brand-hover:    #01908b;
+    --nav:            #011b4a;
+    --side:           #142826;
+    --side-line:      #244543;
+    --danger:         #e66767;
+    --danger-soft:    #33201f;
+
+    --series-1: #01a09b; --series-2: #d95926; --series-3: #9085e9; --series-4: #c98500;
+    --series-5: #d55181; --series-6: #008300; --series-7: #e66767; --series-8: #3987e5;
+
+    --grid: #2e2e2a;
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 1px 8px rgb(0 0 0 / 0.2);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface:        #1a1a19;
+  --surface-raised: #232322;
+  --surface-sunken: #131312;
+  --border:         #35352f;
+  --border-strong:  #4a4a43;
+
+  --ink:            #ffffff;
+  --ink-secondary:  #c3c2b7;
+  --ink-muted:      #8d8c83;
+
+  --accent:         #33bfba;
+  --accent-soft:    #12302f;
+  --brand:          #01a09b;
+  --brand-hover:    #01908b;
+  --nav:            #011b4a;
+  --side:           #142826;
+  --side-line:      #244543;
+  --danger:         #e66767;
+  --danger-soft:    #33201f;
+
+  --series-1: #01a09b; --series-2: #d95926; --series-3: #9085e9; --series-4: #c98500;
+  --series-5: #d55181; --series-6: #008300; --series-7: #e66767; --series-8: #3987e5;
+
+  --grid: #2e2e2a;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 1px 8px rgb(0 0 0 / 0.2);
+}
+
+@theme inline {
+  --color-surface: var(--surface);
+  --color-raised: var(--surface-raised);
+  --color-sunken: var(--surface-sunken);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-secondary);
+  --color-ink-3: var(--ink-muted);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-brand: var(--brand);
+  --color-nav: var(--nav);
+  --color-side: var(--side);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Hiragino Sans",
+               "Noto Sans JP", "Yu Gothic UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+html, body { height: 100%; }
+body {
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "palt";
+}
+
+::selection { background: var(--accent-soft); }
+
+/* ロゴの明暗版の出し分け。テーマは <html data-theme> で確定している */
+:root[data-theme="dark"] .only-light { display: none; }
+:root:not([data-theme="dark"]) .only-dark { display: none; }
+
+/* 日本語の折り返し。文節の途中（「誰\nが」のような箇所）で折れないよう、
+   html[lang=ja] のときは Chrome の文節折り返しを使う。対応外のブラウザは従来どおり。
+   段落は行末の孤立語を避け、見出しは行長を揃える。 */
+html[lang="ja"] { word-break: auto-phrase; line-break: strict; }
+p, li, td, th, dd, dt { text-wrap: pretty; }
+main h2, main h3, [role="dialog"] h3 { text-wrap: balance; }
+
+/* 数値は等幅の桁で揃える */
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* 細いスクロールバー */
+* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong); border-radius: 4px;
+  border: 2px solid transparent; background-clip: content-box;
+}
+*::-webkit-scrollbar-track { background: transparent; }
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+.animate-in { animation: fade-up 0.28s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+/* both だと transform が残り続け、article が position:fixed の基準になる。
+   コロプレスのツールチップがカードのぶんずれて出ていた。backwards なら見た目は同じで残らない。 */
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.35; transform: scale(0.85); }
+  50%      { opacity: 1;    transform: scale(1); }
+}
+.dot { animation: pulse-dot 1.2s ease-in-out infinite; }
+.dot:nth-child(2) { animation-delay: 0.15s; }
+.dot:nth-child(3) { animation-delay: 0.3s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-in, .dot { animation: none; }
+}

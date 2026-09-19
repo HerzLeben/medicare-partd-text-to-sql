@@ -1,0 +1,12 @@
+data/raw/
+data/parquet/
+.venv/
+__pycache__/
+**/__pycache__/
+.git/
+.env
+web/node_modules/
+web/.next/
+docs/
+eval/
+*.md

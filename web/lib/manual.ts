@@ -105,8 +105,9 @@ const JA: Section[] = [
       { kind: "links", items: [
         { label: "データの出典：CMS Medicare Part D Prescribers（data.cms.gov）", href: "https://data.cms.gov/provider-summary-by-type-of-service/medicare-part-d-prescribers" },
         { label: "開発・運営：株式会社ヘルツレーベン", href: "https://herzleben.co.jp/" },
+        { label: "コード：GitHub（HerzLeben/medicare-partd-text-to-sql）", href: "https://github.com/HerzLeben/medicare-partd-text-to-sql" },
       ] },
-      { kind: "p", text: "コードは GitHub で公開予定です。読者が自分の環境・自分の API キーで動かせるよう、手順を README にまとめています。" },
+      { kind: "p", text: "コードは GitHub で公開しています（MIT）。自分の環境・自分の API キーで動かす手順は README にあります。" },
     ],
   },
 ];
@@ -195,8 +196,9 @@ const EN: Section[] = [
       { kind: "links", items: [
         { label: "Data source: CMS Medicare Part D Prescribers (data.cms.gov)", href: "https://data.cms.gov/provider-summary-by-type-of-service/medicare-part-d-prescribers" },
         { label: "Built and operated by HerzLeben Inc.", href: "https://herzleben.co.jp/" },
+        { label: "Code: GitHub (HerzLeben/medicare-partd-text-to-sql)", href: "https://github.com/HerzLeben/medicare-partd-text-to-sql" },
       ] },
-      { kind: "p", text: "The code will be published on GitHub, with a README so readers can run it with their own environment and API key." },
+      { kind: "p", text: "The code is on GitHub (MIT). The README explains how to run it with your own environment and API key." },
     ],
   },
 ];

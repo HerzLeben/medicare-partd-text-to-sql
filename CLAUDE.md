@@ -127,6 +127,8 @@ cd web && npm run dev                                                           
 python eval/run_eval.py --model sonnet                                              # 精度評価
 ```
 
+Claude Code の skill：`/verify-data`（投入結果の確認）、`/eval`（精度評価と記録）、`/deploy`（デプロイ一式）。`.claude/skills/` にある。
+
 ## 質問例（UI 固定・全部通ること）
 
 1. GLP-1 受容体作動薬の州別処方数を 2022→2024 で比較

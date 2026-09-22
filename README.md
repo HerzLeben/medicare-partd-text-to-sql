@@ -103,6 +103,8 @@ gcloud auth application-default set-quota-project <PROJECT>
 
 BigQuery ストレージは論理 19.93 GB（無料枠 10 GiB を超える分で月 約30円）。
 
+データセットに既定の表有効期限が付いていると、投入した表が 60 日後などに黙って消える（実際に踏んだ）。投入前に `bq show --format=prettyjson <PROJECT>:partd | grep -i expiration` で確認し、付いていれば `bq update --default_table_expiration 0 <PROJECT>:partd` で外す。投入後は `/verify-data`（下の skill）が期限の有無も見る。
+
 ## 開発用の BigQuery MCP（Claude Code から投入結果を確かめる）
 
 Claude Code で開発するときに、テーブル一覧・スキーマ・行数の確認を BigQuery コンソールに行かずに済ませるための接続。
@@ -134,6 +136,18 @@ claude          # 起動時に .mcp.json の bigquery を承認 → /mcp で con
 動作確認は「partd のテーブル一覧を出して」「provider_drug の年別の行数を数えて」で足りる。
 `INSERT` / `CREATE` / `DELETE` はサービスアカウントの権限で 403、`partd` 以外のデータセットは Toolbox が拒否する。
 IAM を付けた直後は反映に 1〜2 分かかる。
+
+## Claude Code の skill（`.claude/skills/`）
+
+人が毎回やっていた工程を skill にした。`/名前` で起動する。中身は Markdown 1 枚（`SKILL.md`）で、手順と「守ること」が書いてあるだけ。
+
+| skill | 何をするか | 起動できるのは | 課金 |
+|---|---|---|---|
+| `/verify-data` | 投入結果の確認（5 表・NPI が STRING・年別行数・抑制の NULL）。上の MCP だけで動く | 人と Claude | BigQuery 数百 MB |
+| `/eval` | 30 問の精度評価 → 前回との差 → `docs/EVAL.md` に記録 | 人だけ | Anthropic API（30 問で 8〜9 分） |
+| `/deploy` | plan → 確認 → run → 配信リビジョンの確認 → スモークテスト → 記録 | 人だけ | Cloud Build / Cloud Run |
+
+課金が出る 2 つは `disable-model-invocation: true` で、Claude が勝手に始められない。`/deploy` の中の `./deploy.sh --run` は権限ルール（ask）で必ず確認が出る。
 
 ## 起動
 

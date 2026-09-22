@@ -9,3 +9,6 @@ __pycache__/
 
 # Claude Code の個人設定（共有設定は .claude/settings.json をコミットする）
 .claude/settings.local.json
+
+# 評価の生データ（docs/EVAL_run*.md に要約を残す）
+eval/results/

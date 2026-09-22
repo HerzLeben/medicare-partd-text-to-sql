@@ -11,12 +11,15 @@
       "Bash(python -m ruff *)",
       "Bash(.venv/bin/python -m ruff *)",
       "Bash(npx tsc --noEmit *)",
+      "Bash(web/node_modules/.bin/tsc --noEmit *)",
       "Bash(./data/load.sh --plan *)",
       "Bash(python eval/run_eval.py --validate *)",
-      "mcp__bigquery__*"
+      "mcp__bigquery__*",
+      "Bash(./deploy.sh --plan *)"
     ],
     "ask": [
       "Bash(./data/load.sh --run *)",
+      "Bash(./deploy.sh --run *)",
       "Bash(bq *)",
       "Bash(gcloud run deploy *)",
       "Bash(gcloud builds submit *)",

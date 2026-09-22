@@ -59,3 +59,33 @@
   - 最初の書き込みテストで「エラーなし・出力なし」と出て慌てたが、拒否は JSON-RPC の `error` で返っており、テストスクリプトが `result` しか見ていなかった。MCP の拒否は tool result の `isError` と JSON-RPC error の 2 系統がある
   - 公式ドキュメントの URL が 2 回移転していた（`googleapis.github.io/genai-toolbox` → `mcp-toolbox.dev` → 一部は `docs.cloud.google.com`）。リポジトリ名も `genai-toolbox` から `mcp-toolbox` に変わっている
   - zsh に `#` 付きのコマンド列を貼ると `command not found: #` になり途中で崩れる。人に渡すコマンドはコメント抜きで 1 行ずつ
+
+## skill（`.claude/skills/<name>/SKILL.md`）
+
+- **導入前**：投入結果の確認は人が BigQuery コンソールで見て貼る。精度評価は `run_eval.py` を叩いたあと、見出し・変更点・前回との差を人が `docs/EVAL.md` に書き足す（run 5・6 がそう）。デプロイは `deploy.sh` の `--plan` → `--run` → `--check-traffic` → `--smoke` を人が順に叩いて `docs/DEPLOY.md` に書く。公開リポジトリへの同期は人が diff を見て手で移す（手順はエージェントのメモリに「両方に入れて公開側を push」とだけあった）
+- **導入後**：`/verify-data`・`/eval`・`/deploy`・`/sync-public`。手順と「守ること」を `SKILL.md` に、期待値は `expected.md` に分けた。コードは無い。Markdown 1 枚が工程の正本になり、人の記憶とメモリに散っていた手順がリポジトリに入った
+- **設定**
+
+  | skill | 起動 | 判断 |
+  |---|---|---|
+  | `verify-data` | 人と Claude（`description` で自動選択） | 読み取り専用 MCP だけ・課金は数百 MB なので Claude に任せる。`allowed-tools: mcp__bigquery__*` |
+  | `eval` | 人だけ（`disable-model-invocation: true`） | Anthropic API の課金と 8〜9 分。`--limit`/`--level` の部分実行は番号を付けず `eval/results/`（gitignore）へ |
+  | `deploy` | 人だけ | `allowed-tools` は `--plan`/`--check-traffic`/`--smoke`/`tsc` だけ。`--run` は入れず settings の ask に任せる（skill の allow は settings の ask より弱い） |
+  | `sync-public` | 人だけ、作業リポジトリのみ | 公開側は初回コミットで履歴を作り直したので、ファイル上書きではなくタグ `public-synced` 以降の差分を `git apply --reject`。公開側だけの言い回し（`DEPLOY.md` → `DECISIONS.md`）を潰さない |
+
+- **動作確認（2026-09-23）**
+  - **Skill ツールからの起動は未確認**。このセッションの途中で `.claude/skills/` を作ったため、本体もサブエージェントも `Unknown skill: verify-data`。公式ドキュメントは "Live change detection during session" と書くが、2.1.280 で新規ディレクトリはセッション途中に拾われなかった。**Claude Code を再起動して `/verify-data` が補完に出ること、`/eval` `/deploy` が Claude の一覧に出ないことを人が確認する（未了）**
+  - 手順そのものは、会話履歴を持たないサブエージェント 4 本に `SKILL.md` を読ませて検証した
+    - `verify-data`：MCP 5 本（bq・load.sh なし）で 15 項目すべて期待値と一致
+    - 自然文「投入結果が正しいか確かめて。行数と型を見て」でも同じ手順・同じ表に到達（skill が無くても到達できる程度には CLAUDE.md が効いている、とも言える）
+    - `eval --limit 2`：2/2 正解、0.4 分。部分実行なので `EVAL_run7.md` を作らず `docs/EVAL.md` にも触らなかった。キャッシュは 2 問目から効いた（13,934 トークン）
+    - `deploy`：`tsc` と `./deploy.sh --plan` まで通り、承認待ちで止まった（`--run` は実行していない）
+  - 副産物が 2 つ出た。(1) 総行数の合計が足し算を間違えていた：`docs/DEPLOY.md` と `/api/config` の 84,819,407 は 4 行の和 85,167,407 が正しい（`/data` 画面の数字）。(2) **5 表すべてに有効期限 2026-11-06 が付いていた**（投入 2026-09-07 の 60 日後。データセットの既定の表有効期限）。放置するとホスト版が 11 月に黙って壊れる。外すのは `bq update --expiration 0`（ask）で人の操作。`verify-data` に手順 5 として期限チェックを足した
+- **詰まった点（2026-09-23）**
+  - 「新しいセッションで試す」を入れ子の `claude -p` でやろうとしたら、auto モードの分類器に拒否された（`CLAUDECODE` 環境変数を外す形が迂回に見える）。サブエージェントで代替したが、これは「Skill ツールが引けるか」ではなく「手順が正しいか」の検証にしかならない
+  - `npx tsc --noEmit` はリポジトリ直下に typescript が無いので動かない（`This is not the tsc command you are looking for`）。`web/node_modules/.bin/tsc -p web/tsconfig.json` に変え、allow にも足した
+  - `;` で繋いだ複合コマンドは `allowed-tools` の単発パターンに当たらず確認が出る。「コマンドは 1 つずつ」を skill に書いた
+  - `get_table_info provider` は約 90 列の JSON で 1 万トークン返る。型の確認は `INFORMATION_SCHEMA.COLUMNS` に変えた（MCP は `partd.INFORMATION_SCHEMA` を通す。`SCHEMATA_OPTIONS` は SA の権限で 403 なので、データセットの既定期限は人が `bq show` で見る）
+  - `provider_drug` の列を 4 本まとめて集計したら dry-run 2.58 GB で MCP の 2 GiB 上限に当たった。verify-data の SQL は 1〜2 列に絞ってある
+  - 公開側と作業側は同じファイルでも言い回しが違う（`api/main.py` のコメントは `DEPLOY.md` 参照 → `README の表`）。上書き同期にすると公開側の直しが毎回消えるので、差分適用にした
+  - その差分適用で `git apply --3way` は使えなかった。公開側は履歴を作り直しているので元の blob が無く（`repository lacks the necessary blob`）、1 hunk でも当たらないと全ファイルが戻る（atomic）。`--reject` に変え、当たらない hunk は `*.rej` から手で移す。最初の同期で当たらなかったのは `api/main.py` の総行数の行（コメントが両側で違う）

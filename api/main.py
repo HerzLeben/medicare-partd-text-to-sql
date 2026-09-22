@@ -410,7 +410,7 @@ def _load_overview() -> dict[str, Any]:
 
     return {
         "period": "CY2022–2024",
-        "rows": 84_819_407,          # 3年 × 5テーブルの合計（投入時の実測。README の表と同じ）
+        "rows": 85_167_407,          # 3年 × 5テーブルの合計（3 表 85,167,141 ＋ seed 266。README の表の和）
         "stats": stats,
         "tables": [
             {"name": "provider_drug", "grainJa": "年 × 医師 × 薬剤",

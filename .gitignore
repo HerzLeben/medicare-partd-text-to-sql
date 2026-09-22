@@ -6,3 +6,6 @@ data/parquet/
 __pycache__/
 .venv/
 .DS_Store
+
+# Claude Code の個人設定（共有設定は .claude/settings.json をコミットする）
+.claude/settings.local.json

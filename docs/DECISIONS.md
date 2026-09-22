@@ -42,3 +42,8 @@
 - gcloud は `CLOUDSDK_CORE_DISABLE_PROMPTS=1`。未有効 API の「有効化しますか」で無言で止まる
 - bash で `"$var（…）"` のように変数の直後に全角括弧を置くと、変数名にバイトが取り込まれる。`${var}` と書く
 - 実行用サービスアカウントの権限は `bigquery.jobUser`、`partd` データセットの READER、`ANTHROPIC_API_KEY` の secretAccessor の 3 つだけ
+
+## ハーネスの後付け（09-23〜）
+
+- **初版は CLAUDE.md と docs/ だけで作った。`.claude/`（権限・MCP・skill・hook）は後付け**（09-23）。人が毎回やっていた工程を設定に移す。前後の対比は `docs/HARNESS.md`
+- **権限は `.claude/settings.json` にコミット**（09-23）。課金・外部影響のあるコマンドは ask、`.env`・鍵・IAM 変更・`bq rm` は deny。`bq` はグローバル引数が先に来る形を前方一致で捕まえられないので丸ごと ask。確認した公式ドキュメント：`https://code.claude.com/docs/en/permissions`（ルールの書式、deny > ask > allow、Read/Edit の gitignore 書式）、`https://code.claude.com/docs/en/settings`（settings.local.json の扱い）

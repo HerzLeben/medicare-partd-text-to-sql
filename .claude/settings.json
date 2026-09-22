@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(ls *)",
+      "Bash(python -m pytest *)",
+      "Bash(.venv/bin/python -m pytest *)",
+      "Bash(ruff *)",
+      "Bash(python -m ruff *)",
+      "Bash(.venv/bin/python -m ruff *)",
+      "Bash(npx tsc --noEmit *)",
+      "Bash(./data/load.sh --plan *)",
+      "Bash(python eval/run_eval.py --validate *)"
+    ],
+    "ask": [
+      "Bash(./data/load.sh --run *)",
+      "Bash(bq *)",
+      "Bash(gcloud run deploy *)",
+      "Bash(gcloud builds submit *)",
+      "Bash(gsutil *)",
+      "Bash(gcloud storage *)",
+      "Bash(git push *)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(*.key.json)",
+      "Bash(cat .env *)",
+      "Bash(gcloud iam *)",
+      "Bash(gcloud projects add-iam-policy-binding *)",
+      "Bash(bq rm *)"
+    ]
+  }
+}

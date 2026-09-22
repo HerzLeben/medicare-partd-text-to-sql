@@ -1,0 +1,49 @@
+# MCP Toolbox for Databases の設定（開発用 BigQuery MCP）。
+# Claude Code から partd データセットを読み取り専用で見るためのもの。アプリ本体は使わない。
+#
+#   起動： toolbox --config mcp/bigquery.tools.yaml --stdio   （.mcp.json が呼ぶ）
+#   認証： ADC（gcloud auth application-default login）。BIGQUERY_IMPERSONATE_SERVICE_ACCOUNT を
+#         指定すると、その読み取り専用サービスアカウントになりすまして実行する（鍵ファイル不要）
+#
+# 守り（アプリ側 app/guards.py と同じ方針）：
+#   readOnly: true        SELECT 以外を拒否
+#   allowedDatasets       partd 以外のデータセット参照を dry-run で検出して拒否（INFORMATION_SCHEMA を含む）
+#   maximumBytesBilled    1 クエリの課金上限 2 GiB（アプリと同じ値。dry-run の見積もりに対して効く）
+#   maxQueryResultRows    返す行数の上限
+kind: source
+name: partd-bigquery
+type: bigquery
+project: ${BIGQUERY_PROJECT}
+location: ${BIGQUERY_LOCATION:US}
+readOnly: true
+allowedDatasets:
+  - partd
+maxQueryResultRows: 100
+maximumBytesBilled: 2147483648
+impersonateServiceAccount: ${BIGQUERY_IMPERSONATE_SERVICE_ACCOUNT:}
+---
+kind: tool
+name: list_datasets
+type: bigquery-list-dataset-ids
+source: partd-bigquery
+description: プロジェクト内のデータセット一覧を返す（allowedDatasets により partd だけが見える）。
+---
+kind: tool
+name: list_tables
+type: bigquery-list-table-ids
+source: partd-bigquery
+description: データセット内のテーブル一覧を返す。dataset には partd を指定する。
+---
+kind: tool
+name: get_table_info
+type: bigquery-get-table-info
+source: partd-bigquery
+description: テーブルのスキーマ（列名・型・説明）と行数・サイズなどのメタデータを返す。
+---
+kind: tool
+name: execute_sql
+type: bigquery-execute-sql
+source: partd-bigquery
+description: |
+  partd データセットに対して SELECT を実行する（読み取り専用、2 GiB 上限、最大 100 行）。
+  テーブルは partd.<table> と修飾すること。行数の検証や投入結果の確認に使う。

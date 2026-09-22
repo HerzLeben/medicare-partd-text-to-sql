@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "bigquery": {
+      "command": "toolbox",
+      "args": ["--config", "mcp/bigquery.tools.yaml", "--stdio"],
+      "env": {
+        "BIGQUERY_PROJECT": "${GCP_PROJECT:-partd-explorer}",
+        "BIGQUERY_LOCATION": "${BQ_LOCATION:-US}",
+        "BIGQUERY_IMPERSONATE_SERVICE_ACCOUNT": "${BQ_MCP_SA:-partd-mcp-reader@partd-explorer.iam.gserviceaccount.com}"
+      }
+    }
+  }
+}

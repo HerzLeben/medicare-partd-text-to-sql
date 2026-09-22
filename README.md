@@ -103,6 +103,38 @@ gcloud auth application-default set-quota-project <PROJECT>
 
 BigQuery ストレージは論理 19.93 GB（無料枠 10 GiB を超える分で月 約30円）。
 
+## 開発用の BigQuery MCP（Claude Code から投入結果を確かめる）
+
+Claude Code で開発するときに、テーブル一覧・スキーマ・行数の確認を BigQuery コンソールに行かずに済ませるための接続。
+アプリ本体は使わない（アプリは `google-cloud-bigquery` で直接叩く）。
+
+- サーバー：[MCP Toolbox for Databases](https://github.com/googleapis/mcp-toolbox)（Google 公式 OSS）
+- 設定：`.mcp.json`（プロジェクトスコープ。Claude Code の起動時に承認を求められる）と `mcp/bigquery.tools.yaml`（読み取り専用・`partd` だけ・1 クエリ 2 GiB 上限・最大 100 行）
+- 認証：ADC。`BQ_MCP_SA` に読み取り専用のサービスアカウントを指定すると、そのアカウントになりすまして実行する（鍵ファイルは作らない）
+
+```bash
+brew install mcp-toolbox                      # macOS。他 OS は上のリンクの Releases から
+gcloud auth application-default login
+
+# 読み取り専用のサービスアカウント（推奨。省略すると自分の ADC の権限でそのまま動く）
+PROJECT=<your-project>
+SA=partd-mcp-reader@$PROJECT.iam.gserviceaccount.com
+gcloud iam service-accounts create partd-mcp-reader --project=$PROJECT --display-name="BigQuery MCP reader (partd read-only)"
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:$SA" --role="roles/bigquery.jobUser" --condition=None
+bq show --format=prettyjson $PROJECT:partd > /tmp/ds.json
+python3 -c 'import json,sys;p="/tmp/ds.json";d=json.load(open(p));m=sys.argv[1];a=d.setdefault("access",[]);a.append({"role":"READER","userByEmail":m});json.dump(d,open(p,"w"))' $SA
+bq update --source /tmp/ds.json $PROJECT:partd     # データセット単位の READER（bq add-iam-policy-binding --dataset は allowlist が要る）
+gcloud iam service-accounts add-iam-policy-binding $SA --member="user:<your-account>" --role="roles/iam.serviceAccountTokenCreator"
+
+# Claude Code を起動するシェルで
+export GCP_PROJECT=$PROJECT BQ_MCP_SA=$SA
+claude          # 起動時に .mcp.json の bigquery を承認 → /mcp で connected を確認
+```
+
+動作確認は「partd のテーブル一覧を出して」「provider_drug の年別の行数を数えて」で足りる。
+`INSERT` / `CREATE` / `DELETE` はサービスアカウントの権限で 403、`partd` 以外のデータセットは Toolbox が拒否する。
+IAM を付けた直後は反映に 1〜2 分かかる。
+
 ## 起動
 
 ```bash

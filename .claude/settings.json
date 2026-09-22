@@ -12,7 +12,8 @@
       "Bash(.venv/bin/python -m ruff *)",
       "Bash(npx tsc --noEmit *)",
       "Bash(./data/load.sh --plan *)",
-      "Bash(python eval/run_eval.py --validate *)"
+      "Bash(python eval/run_eval.py --validate *)",
+      "mcp__bigquery__*"
     ],
     "ask": [
       "Bash(./data/load.sh --run *)",

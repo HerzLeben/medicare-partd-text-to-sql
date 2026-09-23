@@ -14,7 +14,7 @@
 含まれない**（`data/download.sh` が CMS から取得する）。
 ホスト版は招待制で一般公開していないので、**自分の環境で動かす前提**。
 
-2 分の紹介動画：[日本語字幕](https://youtu.be/6-UHYb1T_qU) / [English subtitles](https://youtu.be/_HJs8jPskwA)
+2 分の紹介動画：[日本語字幕](https://youtu.be/_HJs8jPskwA) / [English subtitles](https://youtu.be/6-UHYb1T_qU)
 
 <p><img src="docs/screenshots/02_q1_map.png" width="720" alt="GLP-1 の州別処方数を 2022→2024 で比較した画面"></p>
 

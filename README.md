@@ -1,11 +1,11 @@
 # Medicare Part D × Text-to-SQL
 
-米国 CMS の公開データ「Medicare Part D Prescribers」（CY2022–2024、**8,481万行**）を、
+米国 CMS の公開データ「Medicare Part D Prescribers」（CY2022–2024、処方明細 **8,069万行**）を、
 日本語（または英語）の質問から SQL を生成して探索するアプリ。Claude の tool use で
 「SQL を書く → BigQuery で実行する → グラフの仕様を決める → 結果を解釈する」を回す。
 
 > **English summary** — A text-to-SQL app over the public CMS *Medicare Part D Prescribers*
-> dataset (CY2022–2024, 85M rows). Claude writes and self-corrects SQL, BigQuery runs it, and
+> dataset (CY2022–2024, 80.7M prescriber-drug rows). Claude writes and self-corrects SQL, BigQuery runs it, and
 > the answer comes back as a table, a chart (bar / line / state choropleth) and a short reading.
 > Run it locally with your own Anthropic API key and Google Cloud project. Deploy to Cloud Run
 > is optional and invite-only. MIT licensed; the data is not in this repo.
@@ -52,6 +52,8 @@
 | `sql/` | `ddl.sql`（schema JSON から生成）、`seed_state.sql`、`seed_drug_class.sql` |
 | `eval/` | 精度評価セット |
 | `docs/` | 設計書、データ辞書、設計上の判断、精度評価、スクリーンショット |
+| `tests/` | ガードの単体テスト（BigQuery に接続しない） |
+| `.claude/`, `.mcp.json`, `mcp/` | Claude Code のハーネス（権限・hook・skill・BigQuery MCP）。「[Claude Code のハーネス](#claude-code-のハーネス)」 |
 
 Next.js が `/api/*` を FastAPI にプロキシする。Docker では1コンテナに同居させる。
 
@@ -255,6 +257,30 @@ Application Default Credentials を使う。モデル ID は接頭辞なしの `
 システムプロンプトは 11,959 トークン。`cache_control` を付けているので2ターン目以降は
 入力の 0.1 倍単価で読まれる。
 
+## Claude Code のハーネス
+
+文書（`CLAUDE.md`・`docs/`）だけでも Claude Code は動くが、約束が守られたかの確認は人に残る。
+文書だけのとき人が毎回やる工程を、権限・MCP・skill・hook が肩代わりする（ハーネスなし／ありの比較と詰まった点は `docs/HARNESS.md`）。
+clone すれば同じ設定で動く。
+
+| 種別 | ファイル | 中身 |
+|---|---|---|
+| 権限 | `.claude/settings.json` | 読み取り系とテストは allow。`load.sh --run`・`bq`・`gcloud run deploy`・`gcloud builds submit`・`git push` は実行前に確認（ask）。`.env`・鍵・IAM 変更・`bq rm` は deny |
+| MCP | `.mcp.json`、`mcp/bigquery.tools.yaml` | 開発用の BigQuery 接続（読み取り専用・`partd` のみ・1 クエリ 2 GiB 上限）。「[開発用の BigQuery MCP](#開発用の-bigquery-mcpclaude-code-から投入結果を確かめる)」 |
+| hook | `.claude/hooks/*.py` | `guards.py`・`prompts/`・`tools.py`・`tests/` の編集後に `pytest`、`.py` に `ruff`、`web/` の `.ts(x)` に `tsc`。`load.sh --run` は直前 30 分に同じ対象の `--plan` が無いと止める |
+| skill | `.claude/skills/<name>/SKILL.md` | `/cms-csv-to-bigquery`（投入）、`/verify-data`（投入結果の確認）、`/display-check`（表示崩れの点検）、`/guard-glossary-update`（辞書・ガードの直し方）、`/eval`（精度評価）、`/deploy`（Cloud Run） |
+
+自分の環境で有効にする手順：
+
+```bash
+.venv/bin/python -m pip install -r requirements-dev.txt   # pytest と ruff（hook が使う）
+brew install mcp-toolbox && gcloud auth application-default login   # MCP（上の節）
+claude      # 起動時に「このフォルダを信頼するか」と「.mcp.json の bigquery を使うか」を承認
+```
+
+権限は `.claude/settings.json` を読んで、自分の運用に合わなければ `.claude/settings.local.json`（git 管理外）で上書きする。
+hook は `settings.json` の `hooks` を消せば止まる。skill は `/` を打つと一覧に出る。
+
 ## ドキュメント
 
 | ファイル | 内容 |
@@ -262,6 +288,7 @@ Application Default Credentials を使う。モデル ID は接頭辞なしの `
 | `docs/design.md` | 設計書。アーキテクチャ、DDL、ツール定義、ガード、画面 |
 | `docs/data_dictionary.md` | CMS 公式データ辞書の日本語対訳（列名・型・抑制ルールの正本） |
 | `docs/DECISIONS.md` | 設計上の判断と、踏んだ落とし穴の要約 |
+| `docs/HARNESS.md` | Claude Code のハーネス（権限・MCP・skill・hook）の記録。ハーネスなし／ありの比較と止まった実例 |
 | `docs/EVAL.md` | 精度評価。30 問の最新結果と履歴 |
 | `docs/screenshots/` | 画面（記事用） |
 | `CLAUDE.md` | Claude Code に渡している開発指示。同じ手順で続きを作れる |

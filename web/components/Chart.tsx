@@ -23,6 +23,16 @@ interface Props {
   mode: Mode;
 }
 
+/**
+ * 数量セルを数値にする。NULL（抑制：1〜10 件）・空文字・非数値は null を返し、0 にしない。
+ * Number(null) は 0 になるので、そのまま集計すると抑制された値が 0 の棒として描かれる。
+ */
+function numOrNull(v: unknown): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
 export default function Chart({ spec, result, mode }: Props) {
   const ink = chartInk(mode);
   const colors = seriesColors(mode);
@@ -35,11 +45,18 @@ export default function Chart({ spec, result, mode }: Props) {
   const data = useMemo(() => {
     if (xi < 0 || yi < 0) return [];
     if (ci < 0) {
-      return rows.map((r) => ({ x: r[xi], y: Number(r[yi]) })).filter((d) => Number.isFinite(d.y));
+      return rows.flatMap((r) => {
+        const y = numOrNull(r[yi]);
+        return y === null ? [] : [{ x: r[xi], y }];
+      });
     }
     // 系列あり: x をキーにして系列ごとの列を作る
     const totals = new Map<string, number>();
-    for (const r of rows) totals.set(String(r[ci]), (totals.get(String(r[ci])) ?? 0) + Number(r[yi] ?? 0));
+    for (const r of rows) {
+      const v = numOrNull(r[yi]);
+      if (v === null) continue;
+      totals.set(String(r[ci]), (totals.get(String(r[ci])) ?? 0) + v);
+    }
     const names = foldSeries([...totals.keys()], totals);
     const keep = new Set(names);
     const byX = new Map<string, Record<string, unknown>>();
@@ -47,8 +64,10 @@ export default function Chart({ spec, result, mode }: Props) {
       const key = String(r[xi]);
       const name = keep.has(String(r[ci])) ? String(r[ci]) : OTHER_LABEL;
       const bucket = byX.get(key) ?? { x: r[xi] };
-      bucket[name] = (Number(bucket[name] ?? 0) || 0) + Number(r[yi] ?? 0);
       byX.set(key, bucket);
+      const v = numOrNull(r[yi]);
+      if (v === null) continue; // NULL（抑制）は 0 に畳まず、その系列の点を欠けさせる
+      bucket[name] = (Number(bucket[name] ?? 0) || 0) + v;
     }
     return [...byX.values()];
   }, [rows, xi, yi, ci]);

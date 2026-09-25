@@ -17,14 +17,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import Cookie, FastAPI, Response          # noqa: E402
-from fastapi.middleware.cors import CORSMiddleware     # noqa: E402
-from fastapi.responses import StreamingResponse        # noqa: E402
-from pydantic import BaseModel, Field                  # noqa: E402
+from fastapi import Cookie, FastAPI, Response  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from fastapi.responses import StreamingResponse  # noqa: E402
+from pydantic import BaseModel, Field  # noqa: E402
 
-from app.agent import Agent                            # noqa: E402
-from app.guards import RateLimit                       # noqa: E402
-from app.tools import log_event                        # noqa: E402
+from app.agent import Agent  # noqa: E402
+from app.guards import RateLimit  # noqa: E402
+from app.tools import log_event  # noqa: E402
 
 MAX_QUESTIONS = int(os.getenv("MAX_QUESTIONS_PER_SESSION", "20"))
 SESSION_COOKIE = "partd_session"

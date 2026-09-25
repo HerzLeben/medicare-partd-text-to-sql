@@ -1,0 +1,4 @@
+# 開発用（テストと lint）。本番の requirements.txt には入れない。
+#   .venv/bin/python -m pip install -r requirements-dev.txt
+pytest>=8.3
+ruff>=0.6

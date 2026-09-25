@@ -2,6 +2,11 @@
 
 const COST_HINT = /(cst|cost|spend|費用|薬剤費)/i;
 const RATE_HINT = /(rate|share|ratio|growth|pct|percent|率|割合|増減)/i;
+/**
+ * CMS の元データで既にパーセント値になっている列。RATE_HINT に当たるが 100 倍してはいけない
+ * （opioid_prscrbr_rate 9.27 を「927.4%」と出した実例）。Claude が SAFE_DIVIDE で作る率は分数なので対象外。
+ */
+const PERCENT_ALREADY = /^(opioid_(la_)?prscrbr_rate|.*_pct)$/i;
 
 /**
  * 桁区切りしてはいけない列。年やコードは数量ではないので
@@ -22,6 +27,9 @@ export function formatNumber(v: unknown, column?: string): string {
   const n = typeof v === "number" ? v : Number(v);
   if (!Number.isFinite(n)) return String(v);
 
+  if (column && PERCENT_ALREADY.test(column)) {
+    return `${n.toFixed(1)}%`;
+  }
   if (column && RATE_HINT.test(column)) {
     return `${(n * 100).toFixed(1)}%`;
   }

@@ -120,7 +120,8 @@ def _referenced_tables(scan: str) -> set[str]:
     """
     cte_names = {
         m.group(1).lower()
-        for m in re.finditer(r"\b(?:WITH|,)\s+([A-Za-z_]\w*)\s+AS\s*\(", scan, re.IGNORECASE)
+        # \b を先頭に置くと "), b AS (" のカンマ側で境界が取れず、2 つ目以降の CTE を拾えない
+        for m in re.finditer(r"(?:\bWITH|,)\s+([A-Za-z_]\w*)\s+AS\s*\(", scan, re.IGNORECASE)
     }
 
     # FROM は1つずつ独立に見る。finditer で句ごと食わせるとサブクエリ内の

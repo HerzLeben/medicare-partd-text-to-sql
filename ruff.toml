@@ -1,0 +1,12 @@
+# ruff の最小構成。既存コードで大量に落ちない範囲から始める（CLAUDE.md の後付け方針）。
+# 対象は app/ api/ eval/ data/ tests/。video/ は記事用の生成スクリプトなので除外。
+target-version = "py312"
+line-length = 100
+extend-exclude = ["video", "web", "data/raw", "data/parquet", ".venv"]
+
+[lint]
+# E: pycodestyle エラー、F: pyflakes（未使用 import・未定義名）、I: import 順、B: bugbear（よくあるバグ）
+select = ["E", "F", "I", "B"]
+# E501（行の長さ）は日本語コメントで超えやすいので除外
+# B905（zip の strict=）は既存 4 か所が長さを事前に確認しているので除外
+ignore = ["E501", "B905"]

@@ -43,9 +43,14 @@
 - bash で `"$var（…）"` のように変数の直後に全角括弧を置くと、変数名にバイトが取り込まれる。`${var}` と書く
 - 実行用サービスアカウントの権限は `bigquery.jobUser`、`partd` データセットの READER、`ANTHROPIC_API_KEY` の secretAccessor の 3 つだけ
 
-## ハーネスの後付け（09-23〜）
+## ハーネス（09-23〜）
 
-- **初版は CLAUDE.md と docs/ だけで作った。`.claude/`（権限・MCP・skill・hook）は後付け**（09-23）。人が毎回やっていた工程を設定に移す。前後の対比は `docs/HARNESS.md`
+- **文書（CLAUDE.md・docs/）だけでもエージェントは動くが、約束が守られたかの確認は人に残る**（09-23）。文書だけのとき人が毎回やる工程を、`.claude/`（権限・MCP・skill・hook）が肩代わりする。ハーネスなし／ありの比較は `docs/HARNESS.md`
 - **権限は `.claude/settings.json` にコミット**（09-23）。課金・外部影響のあるコマンドは ask、`.env`・鍵・IAM 変更・`bq rm` は deny。`bq` はグローバル引数が先に来る形を前方一致で捕まえられないので丸ごと ask。確認した公式ドキュメント：`https://code.claude.com/docs/en/permissions`（ルールの書式、deny > ask > allow、Read/Edit の gitignore 書式）、`https://code.claude.com/docs/en/settings`（settings.local.json の扱い）
 - **開発用の BigQuery MCP は MCP Toolbox for Databases（Google 公式 OSS）**（09-23）。読み取り専用・`partd` のみ・2 GiB 上限を Toolbox 側で強制でき、読者は `brew install mcp-toolbox` で再現できる。Google のリモート版は課金上限が無く、書き込み可のツールを外すのに IAM deny policy が要るので見送り。認証は鍵ファイルを作らず、専用 SA（`bigquery.jobUser` ＋ `partd` の READER）への偽装。確認した公式ドキュメント：`https://code.claude.com/docs/en/mcp`（`.mcp.json` の書式と `${VAR:-default}` 展開）、`https://mcp-toolbox.dev/integrations/bigquery/source/`（source のフィールド）、`https://mcp-toolbox.dev/integrations/bigquery/tools/bigquery-execute-sql/`（readOnly と allowedDatasets の強制方法）、`https://docs.cloud.google.com/bigquery/docs/pre-built-tools-with-mcp-toolbox`（導入手順）、`https://docs.cloud.google.com/bigquery/docs/use-bigquery-mcp`（リモート版の仕様）。1.12.0 の起動フラグは `--config`（ドキュメントの `--tools-file` は旧名）
 - **繰り返す工程は skill（`.claude/skills/<name>/SKILL.md`）に**（09-23）。`/verify-data`（投入結果の確認、MCP だけで動く）は Claude が自分で選べる。課金が出る `/eval`（精度評価と記録）と `/deploy`（plan → run → 配信確認 → スモーク → 記録）は `disable-model-invocation: true` で人だけが起動する。skill の `allowed-tools` はその turn の allow を足すだけで、settings の ask/deny より弱い（deny > ask > allow）ので、`deploy.sh --run` の確認は skill 経由でも出る。`/sync-public`（公開リポジトリへの同期）は作業リポジトリだけに置く。確認した公式ドキュメント：`https://code.claude.com/docs/en/skills`（frontmatter の項目、`$ARGUMENTS`、`` !`cmd` `` の前処理、`.claude/commands` との統合）
+- **skill は 7 本**（09-23）。記事の Part2〜4 に対応する `cms-csv-to-bigquery`（第 2 作でも使う汎用版。Part D 固有の値は末尾の表に隔離）、`display-check`、`guard-glossary-update`、`eval` と、運用の `verify-data`、`deploy`、`sync-public`。新しい skill ディレクトリはセッション途中では拾われない（2 セッションで再現）ので、検証は履歴を持たないサブエージェントに SKILL.md を読ませて行い、実行して初めて分かった不一致（`load.sh` が年を受け取らない等）を直した
+- **hook は 3 本、スクリプトは 2 つ**（09-23）。編集後の `pytest` と `ruff`/`tsc` は 1 スクリプト（`post_edit_checks.py`、exit 2 ＋ stderr で返す）、課金ゲートは `billing_gate.py`（PreToolUse で `load.sh --run` を検査し、30 分以内の同対象 `--plan` が無ければ JSON の `deny`）。`gcloud run deploy` 等は settings の ask に任せて hook では重ねない。前提の `tests/test_guards.py` を書いた時点で複数 CTE の誤検出が見つかった。確認した公式ドキュメント：`https://code.claude.com/docs/en/hooks`（settings の `hooks` の書式、stdin の JSON、exit 2 の意味、`permissionDecision`、`CLAUDE_PROJECT_DIR`、hook 変更の即時反映）
+- **CMS の元データで既に % の列は 100 倍しない**（09-23）。`opioid_prscrbr_rate` が「927.4%」と出ていた。`format.ts` の `PERCENT_ALREADY` に列名を列挙。Claude が `SAFE_DIVIDE` で作る率は分数なので従来どおり 100 倍
+- **グラフの NULL は 0 に畳まず点を欠けさせる**（09-23）。抑制（1〜10 件）が 0 の棒に見えていた
+- **ハーネスと文書の位置づけ**（09-23）。`CLAUDE.md` は「やらないこと」の MCP の行を改め、`.claude/` の使い方（権限・MCP・hook・skill 7 本の使う場面）を持つ。README にはハーネスの節と読者が有効にする手順。前後比較・止まった実例・詰まった点は `docs/HARNESS.md`、判断はこのファイル。文書だけのとき人が毎回やる工程のうち、投入結果の確認・課金コマンドの確認・テストと lint の実行・繰り返す手順の記憶を、ハーネスが肩代わりする

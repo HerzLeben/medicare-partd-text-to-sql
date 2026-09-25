@@ -12,3 +12,6 @@ __pycache__/
 
 # 評価の生データ（docs/EVAL_run*.md に要約を残す）
 eval/results/
+
+# hook の状態ファイル（直前の load.sh --plan の記録）
+.claude/hooks/.state/

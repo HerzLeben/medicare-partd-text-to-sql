@@ -36,9 +36,28 @@ web/            Next.js（app/, components/, lib/）
 data/           download.sh, preprocess.py, schema/*.json, load.sh
 sql/            ddl.sql, seed_drug_class.sql, seed_state.sql
 eval/           questions.yaml, run_eval.py
-docs/           design.md, data_dictionary.md, DECISIONS.md, EVAL.md
-Dockerfile, cloudbuild.yaml, requirements.txt, .env.example, README.md
+docs/           design.md, data_dictionary.md, DECISIONS.md, HARNESS.md, EVAL.md
+tests/          test_guards.py（BigQuery に接続しない単体テスト。hook が回す）
+.claude/        settings.json（権限と hook）、skills/<name>/SKILL.md、hooks/*.py
+.mcp.json, mcp/ 開発用 BigQuery MCP（MCP Toolbox。読み取り専用・partd のみ・2 GiB 上限）
+Dockerfile, cloudbuild.yaml, requirements.txt, requirements-dev.txt, ruff.toml, .env.example, README.md
 ```
+
+### `.claude/` の使い方（ハーネスなし／ありの比較と詰まった点は `docs/HARNESS.md`）
+
+- 権限：課金・外部影響のあるコマンド（`load.sh --run`、`bq`、`gcloud run deploy`、`gcloud builds submit`、`git push`）は ask。`.env`・鍵・IAM 変更・`bq rm` は deny
+- MCP：`bigquery`（`list_datasets` / `list_tables` / `get_table_info` / `execute_sql`）。行数・スキーマ・投入結果は `bq` ではなくこれで見る
+- hook：`guards.py`・`prompts/*`・`tools.py`・`tests/*` を編集すると `pytest`、`.py` は `ruff`、`web/` の `.ts(x)` は `tsc` が自動で走る。`load.sh --run` は直前 30 分に同じ対象の `--plan` が無いと止まる
+- skill（`/名前` で起動。`disable-model-invocation` のものは人だけ）：
+
+  | skill | 使う場面 | 起動 |
+  |---|---|---|
+  | `cms-csv-to-bigquery` | データを入れ直す・年を足す・別の CMS データセットを同じ流儀で入れる | 人と Claude（`--run` の前で止まる） |
+  | `verify-data` | 投入結果の確認（5 表・型・年別行数・抑制の NULL・有効期限） | 人と Claude |
+  | `display-check` | `web/` を触ったあと、新しい列やグラフ種を足したとき | 人と Claude |
+  | `guard-glossary-update` | 評価で落ちた質問を起点に glossary / fewshot / system.md / guards / questions のどこを直すか | 人と Claude |
+  | `eval` | 30 問の精度評価と EVAL.md の記録（課金） | 人だけ |
+  | `deploy` | Cloud Run へ plan → run → 配信確認 → スモーク（課金） | 人だけ |
 
 ## 作業フェーズ（この順で。各フェーズ末に動作確認してから次へ）
 
@@ -115,7 +134,7 @@ Dockerfile, cloudbuild.yaml, requirements.txt, .env.example, README.md
 
 - 認証・ユーザー管理、履歴の永続化
 - 患者レベルの推定、医師個人の評価につながる機能（ランキング表示は NPI 併記・免責付きで可）
-- Agent SDK / MCP 化（第2弾で扱う）
+- ~~Agent SDK / MCP 化（第2弾で扱う）~~ → **2026-09-23 に変更。開発用の BigQuery MCP は接続済み（`.mcp.json`）。アプリのツール（run_sql / plot_spec）の MCP 化と Agent SDK は扱わない**
 - Vertex AI 経由の呼び出し（README に差し替え方法を1段落書くだけ）
 
 ## 動作確認コマンド
@@ -124,7 +143,9 @@ Dockerfile, cloudbuild.yaml, requirements.txt, .env.example, README.md
 python -m app.agent --question "GLP-1受容体作動薬の州別処方数を2022→2024で比較して"   # CLI で1問
 ALLOW_DEV_CORS=1 PYTHONPATH=. uvicorn api.main:app --port 8000 --reload             # API
 cd web && npm run dev                                                              # UI (:3000)
-python eval/run_eval.py --model sonnet                                              # 精度評価
+python eval/run_eval.py --model sonnet                                              # 精度評価（/eval でも可）
+.venv/bin/python -m pytest tests/ -q                                               # ガードの単体テスト（hook が自動でも回す）
+.venv/bin/python -m ruff check .                                                   # lint
 ```
 
 Claude Code の skill：`/verify-data`（投入結果の確認）、`/eval`（精度評価と記録）、`/deploy`（デプロイ一式）。`.claude/skills/` にある。

@@ -38,8 +38,8 @@ load_dotenv()
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from app.agent import Agent          # noqa: E402
-from app.tools import run_sql        # noqa: E402
+from app.agent import Agent  # noqa: E402
+from app.tools import run_sql  # noqa: E402
 
 QUESTIONS = pathlib.Path(__file__).parent / "questions.yaml"
 REL_TOL = 0.01

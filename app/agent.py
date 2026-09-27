@@ -32,7 +32,7 @@ MAX_SQL_RETRIES = 3          # run_sql が失敗したときに書き直させ�
 MAX_TOOL_TURNS = 10          # ループ全体の保険
 
 # temperature を受け付けないモデル（送ると 400 になる）。
-# CLAUDE.md は「温度 0」と書いているが、Sonnet 5 以降は sampling パラメータが
+# CLAUDE.md は「temperature 0」と書いていたが、Sonnet 5 以降は sampling パラメータが
 # 廃止されているため送れない。代わりに output_config.effort で振れ幅を抑える。
 NO_TEMPERATURE = ("claude-sonnet-5", "claude-opus-5", "claude-opus-4-8",
                   "claude-opus-4-7", "claude-fable-5")

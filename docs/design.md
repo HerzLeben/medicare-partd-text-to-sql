@@ -153,7 +153,7 @@ CLUSTER BY prscrbr_geo_desc, gnrc_name_norm;
 ### 4.1 モデル・設定
 
 - 既定：Claude Sonnet（最新）。比較用に Haiku をトグル
-- `max_tokens` 4,000、温度 0
+- `max_tokens` 4,000、`temperature` 0
 - Prompt caching：システムプロンプト（スキーマ＋辞書＋few-shot ≈ 8k tokens）に `cache_control`
 
 ### 4.2 システムプロンプト構成

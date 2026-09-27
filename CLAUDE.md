@@ -109,9 +109,10 @@ Dockerfile, docker-entrypoint.sh, cloudbuild.yaml, requirements.txt, requirement
 
 ### Claude 呼び出し
 - システムプロンプト（スキーマ＋辞書＋few-shot）に `cache_control: {"type": "ephemeral"}` を付ける
-- `max_tokens` 4000。**温度は指定しない**（Sonnet 5 以降 `temperature` は廃止で 400 になる）。
+- `max_tokens` 4000。**`temperature` は指定しない**（Sonnet 5 以降 `temperature` は廃止で 400 になる）。
   代わりに `output_config={"effort": "medium"}`。temperature を受け付ける旧世代のみ 0 を送る
 - ツールは `run_sql` と `plot_spec` の2つだけ。増やす場合は設計書を先に更新
+- **API のパラメータ・技術用語は訳さず英語で書く**（`temperature`・`max_tokens`・few-shot・tool use・prompt caching）。コメントも文書も同じ
 - 生成 SQL・課金バイト・所要秒・入出力トークン・キャッシュヒットを必ずログ（構造化 JSON、Cloud Logging で読める形）
 
 ### ガード（省略禁止）

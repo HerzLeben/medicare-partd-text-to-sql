@@ -25,7 +25,9 @@ Cloud Run のホスト版は招待制で、基本的に読者には開放しな�
 - **バックエンド**：Python 3.12、FastAPI（SSE 配信）、`anthropic` SDK（直接。Vertex 経由にしない）、`google-cloud-bigquery`、DuckDB（前処理のみ）
 - 1コンテナに同居させる。Next.js が `/api/*` を `127.0.0.1:8000` の FastAPI へプロキシする
 - BigQuery データセット `partd`（US）、Cloud Run（us-central1）、Cloud Build、Artifact Registry、Secret Manager
-- モデル：`ANTHROPIC_MODEL` 環境変数で指定。既定は最新 Sonnet。ハードコードしない
+- モデル：既定は `ANTHROPIC_MODEL` 環境変数（未指定なら `app/agent.py` の `DEFAULT_MODEL`）。ハードコードしない。
+  UI から切り替えられる3本（sonnet / opus / haiku）の正本は `api/main.py` の `MODELS`。
+  モデルを足すときは `MODELS` と `agent.py` の `NO_TEMPERATURE`（temperature を送らない世代の一覧）の両方を直す
 
 ## リポジトリ構成（この通りに作る）
 
@@ -40,7 +42,10 @@ docs/           design.md, data_dictionary.md, DECISIONS.md, HARNESS.md, EVAL.md
 tests/          test_guards.py（BigQuery に接続しない単体テスト。hook が回す）
 .claude/        settings.json（権限と hook）、skills/<name>/SKILL.md、hooks/*.py
 .mcp.json, mcp/ 開発用 BigQuery MCP（MCP Toolbox。読み取り専用・partd のみ・2 GiB 上限）
-Dockerfile, cloudbuild.yaml, requirements.txt, requirements-dev.txt, ruff.toml, .env.example, README.md
+run.sh          ローカル起動（API :8000 ＋ UI :3000 を同時に。prod で next build 済みを起動）
+deploy.sh       Cloud Run への plan / run / smoke / check-traffic（/deploy skill が呼ぶ）
+smoke_test.py   デプロイ後に1問投げて SQL 生成・実行・解釈・完了まで確認する
+Dockerfile, docker-entrypoint.sh, cloudbuild.yaml, requirements.txt, requirements-dev.txt, ruff.toml, .env.example, README.md
 ```
 
 ### `.claude/` の使い方（ハーネスなし／ありの比較と詰まった点は `docs/HARNESS.md`）
@@ -86,8 +91,13 @@ Dockerfile, cloudbuild.yaml, requirements.txt, requirements-dev.txt, ruff.toml, 
 - `bool` は Python では `int` の派生。数値判定より先に分岐する
 - CSV を Excel で開くと先頭0が落ちる。識別子列は常にクォートし、UI に注意書きを出す
 
+**元データが既に % の列を 100 倍しない。** `opioid_prscrbr_rate` は CMS の時点でパーセント値。
+率らしい列名を一律 100 倍して「927.4%」と出した。除外リストは `web/lib/format.ts` の
+`PERCENT_ALREADY`。Claude が `SAFE_DIVIDE` で作る率は分数なので従来どおり 100 倍する。
+
 **欠測と 0 を混同しない。** CSV の blank は NULL であって 0 ではない（1〜10件の抑制）。
-集計時は `COUNTIF(x IS NULL)` を併記する。
+集計時は `COUNTIF(x IS NULL)` を併記する。グラフでも NULL を 0 に畳まず点を欠けさせる
+（抑制された行が 0 の棒に見えていた）。
 
 **画面を実際に見る。** 数値の表示崩れは型チェックもテストも素通りする。
 
@@ -108,8 +118,10 @@ Dockerfile, cloudbuild.yaml, requirements.txt, requirements-dev.txt, ruff.toml, 
 - SQL は `SELECT` / `WITH` 始まりのみ。`;` 複文禁止。`partd.` 以外のデータセット参照禁止。大文字小文字無視で `DELETE|UPDATE|INSERT|DROP|CREATE|MERGE` を含めば拒否
 - BigQuery は dry-run → `maximum_bytes_billed = 2 GiB` → 実行。タイムアウト 60 秒。結果は先頭 1000 行
   - 上限は **dry-run の見積もり**に対して効く（クラスタ枝刈りは反映されない）。1 GiB だと実測 27 MB のクエリまで拒否される（`docs/DECISIONS.md`）
+- 参照できるのは `partd` の5表だけ（`app/guards.py` の `ALLOWED_TABLES` で名指し）。修飾なしのテーブル参照も拒否
 - セッションあたり 20 質問。超えたら UI で案内
 - `SELECT *` を Claude が出したらツール側でエラーを返して書き直させる
+- **ガードの仕様の正本は `tests/test_guards.py`。** 緩める前にケースを足す（hook が編集のたびに回す）
 
 ### UI
 - ヘッダに「データ：CY2022–2024 / 11件未満は抑制 / 出典 data.cms.gov」を常時表示
@@ -120,6 +132,13 @@ Dockerfile, cloudbuild.yaml, requirements.txt, requirements-dev.txt, ruff.toml, 
 - **系列色は固定順の検証済み8色**（`web/lib/palette.ts`）。循環禁止。9系列目は「その他」に畳む。
   連続量はティール（ヘルツレーベンのコーポレートカラー #01A09B）の単色ランプ、0 をまたぐ増減のみティール↔赤の二極。UI のアクセントも同じティール系（文字用は暗くした `#007a76`）
 - SSE でストリーミングする（SQL → 結果 → グラフ → 解釈 の順に届く）
+- **SSE のイベント型は `api/main.py` と `web/lib/types.ts` の合わせ技**で、種別は
+  `status / sql / result / plot / answer / done / error` の7つ。`agent.py` が新しい経過を流すときは
+  `types.ts` の `SseEvent` と `components/TurnView.tsx` の描き分けを同時に直す。
+  型は TS 側にしか無いので、Python 側だけ変えると画面が無言で落ちる
+- **文言の置き場は2つだけ。** UI の固定文言は `web/lib/i18n.ts`（ja / en を必ず同時に足す）。
+  データ由来のもの（質問例・モデル一覧・絞り込みの選択肢・データ紹介）は `api/main.py` の
+  `/api/config` と `/api/overview` が `?lang=` で言語別に返す。フロントに直書きすると二重管理になる
 
 ### コスト・安全
 - Cloud Run：min 0 / max 2 / concurrency 10 / 1 GiB / timeout 300s
@@ -139,18 +158,34 @@ Dockerfile, cloudbuild.yaml, requirements.txt, requirements-dev.txt, ruff.toml, 
 
 ## 動作確認コマンド
 
+Python は必ず `.venv/bin/python` で呼ぶ（hook もこのパスで回す）。
+
 ```
-python -m app.agent --question "GLP-1受容体作動薬の州別処方数を2022→2024で比較して"   # CLI で1問
-ALLOW_DEV_CORS=1 PYTHONPATH=. uvicorn api.main:app --port 8000 --reload             # API
-cd web && npm run dev                                                              # UI (:3000)
-python eval/run_eval.py --model sonnet                                              # 精度評価（/eval でも可）
-.venv/bin/python -m pytest tests/ -q                                               # ガードの単体テスト（hook が自動でも回す）
-.venv/bin/python -m ruff check .                                                   # lint
+./run.sh                                            # API (:8000) と UI (:3000) を同時に起動
+./run.sh prod                                       # 本番相当（next build 済みを起動）
+.venv/bin/python -m app.agent --question "GLP-1受容体作動薬の州別処方数を2022→2024で比較して"   # CLI で1問
+.venv/bin/python -m pytest tests/ -q                # ガードの単体テスト（hook が自動でも回す）
+.venv/bin/python -m pytest tests/test_guards.py -q -k select_star   # 1件だけ
+.venv/bin/python -m ruff check .                    # lint
+cd web && npx tsc --noEmit                          # 型チェック（hook が .ts(x) 編集後に回す）
+.venv/bin/python eval/run_eval.py --validate        # 正解 SQL の実行可否だけ（Anthropic API を使わない）
+.venv/bin/python eval/run_eval.py --limit 3         # 先頭3問だけ試す（課金）
+.venv/bin/python eval/run_eval.py --model sonnet    # 30問の精度評価（課金。/eval が正）
+./deploy.sh --plan / --run / --smoke                # デプロイ（課金。/deploy が正）
 ```
 
-Claude Code の skill：`/verify-data`（投入結果の確認）、`/eval`（精度評価と記録）、`/deploy`（デプロイ一式）。`.claude/skills/` にある。
+API とフロントを別々に動かしたいときだけ：
+
+```
+ALLOW_DEV_CORS=1 PYTHONPATH=. .venv/bin/uvicorn api.main:app --port 8000 --reload
+cd web && npm run dev
+```
+
+skill の一覧と使い分けは上の「`.claude/` の使い方」の表を見る（`.claude/skills/<name>/SKILL.md`）。
 
 ## 質問例（UI 固定・全部通ること）
+
+正本は `api/main.py` の `EXAMPLES`（ja / en）。ここは控え。
 
 1. GLP-1 受容体作動薬の州別処方数を 2022→2024 で比較
 2. 2024 年の総薬剤費トップ10薬剤（ブランド/ジェネリック別）

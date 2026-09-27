@@ -2,6 +2,7 @@
 # level: 1=単純集計 2=結合・条件複数 3=用語辞書がないと解けない
 # expected_sql は BigQuery で実行して結果を確認済み（run_eval.py --validate で再確認できる）。
 # 判定は結果集合の一致（列名は無視、行の順序は無視、数値は相対誤差 1%）。
+# accept_sql（任意）は正しい答えの別の形。expected_sql で外れたときだけこちらでも判定する。
 #
 # 注意: 薬剤名は Title Case（Ozempic / Semaglutide）で、列幅の都合で切り詰められている。
 # 照合は gnrc_name_norm / brnd_name_norm（UPPER）を使い、薬効クラスは drug_class を結合する。
@@ -164,6 +165,11 @@
     FROM partd.geo_drug
     WHERE prscrbr_geo_lvl = 'National' AND year IN (2022, 2024)
     GROUP BY year ORDER BY year
+  # 差分 1 行で答えた場合（48,203,792,588 = 288,569,675,757 − 240,365,883,169）
+  accept_sql: |
+    SELECT SUM(IF(year = 2024, tot_drug_cst, -tot_drug_cst)) AS increase
+    FROM partd.geo_drug
+    WHERE prscrbr_geo_lvl = 'National' AND year IN (2022, 2024)
 
 - id: q18
   level: 2
@@ -208,6 +214,12 @@
     FROM partd.geo_drug
     WHERE prscrbr_geo_lvl = 'National' AND brnd_name_norm = 'OZEMPIC' AND year IN (2022, 2024)
     GROUP BY year ORDER BY year
+  # 全国の OZEMPIC は各年 1 行なので SUM(tot_prscrbrs) で重複しない（2026-09-27 確認）。
+  # 差分 1 行で答えた場合（106,686 = 286,517 − 179,831）
+  accept_sql: |
+    SELECT SUM(IF(year = 2024, tot_prscrbrs, -tot_prscrbrs)) AS increase
+    FROM partd.geo_drug
+    WHERE prscrbr_geo_lvl = 'National' AND brnd_name_norm = 'OZEMPIC' AND year IN (2022, 2024)
 
 - id: q22
   level: 3

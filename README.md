@@ -234,7 +234,8 @@ GitHub の push で自動デプロイしたい場合は `cloudbuild.yaml` を使
 
 ## モデル
 
-`ANTHROPIC_MODEL` で指定する。既定は `claude-sonnet-5`。UI から Haiku 4.5 に切り替えられる。
+`ANTHROPIC_MODEL` で指定する。既定は `claude-sonnet-5`。UI からは Sonnet 5 / Opus 5（賢い・高い）/
+Haiku 4.5（速い・安い）の3つを選べる（一覧は `api/main.py` の `MODELS`）。
 
 Sonnet 5 以降は `temperature` が廃止されているため送っていない
 （送ると 400）。代わりに `output_config={"effort": "medium"}` を使う。

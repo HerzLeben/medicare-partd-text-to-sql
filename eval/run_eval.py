@@ -17,6 +17,9 @@
   厳密一致: 上に加えて行数と列数まで一致するか。
       ── 「余計なものを付けずに、聞かれたとおりに返せたか」を測る指標。
 
+  設問に accept_sql があれば、expected_sql の形で外れたときにその形でも判定する
+  （「どれだけ増えた」の年ごと 2 行／差分 1 行のように、正しい形が 2 つあるとき）。
+
 最初は厳密一致だけで測っていたが、Claude が補助列を足すだけで不正解になり
 4/30（13.3%）と出た。SQL は正しいのに列が1つ多い、という失敗が大半だった。
 Text-to-SQL の精度としては誤解を招くので2本立てにしている。
@@ -123,6 +126,26 @@ def rows_match(got: list[tuple], want: list[tuple]) -> tuple[bool, str]:
     return True, ""
 
 
+def judge(got: list[tuple], want: list[tuple],
+          alt: list[tuple] | None = None) -> tuple[bool, bool, str]:
+    """実質正解・厳密一致・理由を返す。expected_sql の形で外れたら accept_sql の形でも見る。
+
+    「どれだけ増えた」には年ごとの 2 行でも差分の 1 行でも正しく答えられる。
+    どちらの形を選ぶかは回ごとに揺れる（q21 は run 5 で 2 行、run 6 で 1 行）ので、
+    設問側に別の正解の形を書けるようにした。
+    """
+    ok, why = contains_expected(got, want)
+    strict, strict_why = rows_match(got, want)
+    if not ok and alt is not None:
+        alt_ok, alt_why = contains_expected(got, alt)
+        if alt_ok:
+            ok, why = True, alt_why or "accept_sql の形で正解"
+            strict, strict_why = rows_match(got, alt)
+    if ok and not strict:
+        why = why or f"実質正解（{strict_why}）"
+    return ok, strict, why
+
+
 # ---------------------------------------------------------------------------
 # 実行
 # ---------------------------------------------------------------------------
@@ -169,18 +192,21 @@ class Report:
 def validate(questions: list[dict]) -> int:
     """正解 SQL が実際に BigQuery で動くか確かめる。"""
     bad = 0
-    for q in questions:
-        r = run_sql(q["expected_sql"], f"[validate] {q['id']}")
+    checks = [(q["id"], q["expected_sql"], q["question"]) for q in questions]
+    checks += [(f"{q['id']}+accept", q["accept_sql"], q["question"])
+               for q in questions if q.get("accept_sql")]
+    for qid, sql, question in checks:
+        r = run_sql(sql, f"[validate] {qid}")
         if "error" in r:
-            print(f"  ✗ {q['id']}  {r['error'][:110]}")
+            print(f"  ✗ {qid}  {r['error'][:110]}")
             bad += 1
         elif r["returned_rows"] == 0:
-            print(f"  ✗ {q['id']}  0 行（正解 SQL が何も返さない）")
+            print(f"  ✗ {qid}  0 行（正解 SQL が何も返さない）")
             bad += 1
         else:
-            print(f"  ✓ {q['id']}  {r['returned_rows']:>3} 行  "
-                  f"{r['bytes_billed'] / 1048576:>7.1f} MB  {q['question'][:38]}")
-    print(f"\n正解 SQL: {len(questions) - bad}/{len(questions)} 本が実行できました")
+            print(f"  ✓ {qid}  {r['returned_rows']:>3} 行  "
+                  f"{r['bytes_billed'] / 1048576:>7.1f} MB  {question[:38]}")
+    print(f"\n正解 SQL: {len(checks) - bad}/{len(checks)} 本が実行できました")
     return bad
 
 
@@ -200,6 +226,13 @@ def evaluate(questions: list[dict], model: str | None,
                 q["id"], q["level"], q["question"], False,
                 reason=f"正解 SQL が動かない: {expected['error'][:80]}"))
             print(f"[{i}/{len(questions)}] {q['id']} 正解SQL異常")
+            continue
+        accept = run_sql(q["accept_sql"], f"[accept] {q['id']}") if q.get("accept_sql") else None
+        if accept is not None and "error" in accept:
+            report.outcomes.append(Outcome(
+                q["id"], q["level"], q["question"], False,
+                reason=f"accept_sql が動かない: {accept['error'][:80]}"))
+            print(f"[{i}/{len(questions)}] {q['id']} accept_sql 異常")
             continue
 
         t0 = time.time()
@@ -229,11 +262,8 @@ def evaluate(questions: list[dict], model: str | None,
                               tries=len(result.steps), sec=elapsed,
                               out_tokens=result.usage.get("output_tokens", 0))
         else:
-            got, want = normalize(step.result), normalize(expected)
-            ok, why = contains_expected(got, want)
-            strict, strict_why = rows_match(got, want)
-            if ok and not strict:
-                why = why or f"実質正解（{strict_why}）"
+            ok, strict, why = judge(normalize(step.result), normalize(expected),
+                                    normalize(accept) if accept else None)
             outcome = Outcome(
                 q["id"], q["level"], q["question"], ok, ok_strict=strict, reason=why,
                 tries=len(result.steps), sec=elapsed,
@@ -314,11 +344,11 @@ def rejudge(questions: list[dict], saved: str) -> Report:
             report.outcomes.append(Outcome(row["id"], row["level"], row["question"], False,
                                            reason="SQL が実行できない"))
             continue
-        got, want = normalize(got_r), normalize(want_r)
-        ok, why = contains_expected(got, want)
-        strict, strict_why = rows_match(got, want)
-        if ok and not strict:
-            why = why or f"実質正解（{strict_why}）"
+        alt_r = run_sql(q["accept_sql"], f"[accept] {row['id']}") if q.get("accept_sql") else None
+        if alt_r is not None and "error" in alt_r:
+            alt_r = None
+        ok, strict, why = judge(normalize(got_r), normalize(want_r),
+                                normalize(alt_r) if alt_r else None)
         report.outcomes.append(Outcome(
             row["id"], row["level"], row["question"], ok, ok_strict=strict, reason=why,
             tries=row.get("tries", 0), sec=row.get("sec", 0.0),
